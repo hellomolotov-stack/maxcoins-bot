@@ -106,5 +106,5 @@ export function createBot() {
 
 export function createWebhookHandler() {
   const bot = createBot();
-  return webhookCallback(bot, 'std/http');
+  return webhookCallback(bot, 'express');
 }
