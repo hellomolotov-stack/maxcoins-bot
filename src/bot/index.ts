@@ -7,27 +7,7 @@ import { registerWishHandlers } from './handlers/wishes';
 export function createBot() {
   const bot = new Bot(process.env.BOT_TOKEN!);
 
-  bot.use(authMiddleware);
-
-  bot.command('start', async (ctx) => {
-    const role = (ctx as any).userRole;
-    if (role === 'child') {
-      await showChildMenu(ctx);
-    } else {
-      await showParentMenu(ctx);
-    }
-  });
-
-  bot.command('menu', async (ctx) => {
-    const role = (ctx as any).userRole;
-    if (role === 'child') {
-      await showChildMenu(ctx);
-    } else {
-      await showParentMenu(ctx);
-    }
-  });
-
-  // Настройки: первоначальный setup (без authMiddleware — вызывается до настройки)
+  // /setup должен работать до authMiddleware (бот ещё не настроен)
   bot.command('setup', async (ctx) => {
     const { db } = await import('../db/firebase');
     const userId = ctx.from?.id;
@@ -51,6 +31,26 @@ export function createBot() {
       `Для добавления ребёнка используй /addchild\n` +
       `Для добавления второго родителя используй /addparent`
     );
+  });
+
+  bot.use(authMiddleware);
+
+  bot.command('start', async (ctx) => {
+    const role = (ctx as any).userRole;
+    if (role === 'child') {
+      await showChildMenu(ctx);
+    } else {
+      await showParentMenu(ctx);
+    }
+  });
+
+  bot.command('menu', async (ctx) => {
+    const role = (ctx as any).userRole;
+    if (role === 'child') {
+      await showChildMenu(ctx);
+    } else {
+      await showParentMenu(ctx);
+    }
   });
 
   bot.command('addchild', async (ctx) => {
