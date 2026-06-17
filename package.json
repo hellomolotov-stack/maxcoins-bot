@@ -1,0 +1,20 @@
+{
+  "name": "maxcoins-bot",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "ts-node src/dev.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.55",
+    "firebase-admin": "^12.0.0",
+    "grammy": "^1.26.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.0"
+  }
+}

@@ -1,0 +1,52 @@
+export type Role = 'parent' | 'child';
+
+export interface BotUser {
+  telegramId: number;
+  name: string;
+  role: Role;
+}
+
+export interface Task {
+  id: string;
+  title: string;
+  description: string;
+  reward: number;
+  type: 'once' | 'recurring';
+  recurringSchedule?: 'daily' | number[]; // number[] = days of week (0=Sun)
+  active: boolean;
+  createdAt: FirebaseFirestore.Timestamp;
+}
+
+export interface Submission {
+  id: string;
+  taskId: string;
+  taskTitle: string;
+  childId: number;
+  photoFileId: string;
+  status: 'pending' | 'approved' | 'rejected';
+  submittedAt: FirebaseFirestore.Timestamp;
+  reviewedAt?: FirebaseFirestore.Timestamp;
+  comment?: string;
+}
+
+export interface Wish {
+  id: string;
+  title: string;
+  cost: number;
+  proposedBy: number;
+  status: 'pending' | 'approved' | 'rejected' | 'redeemed';
+  createdAt: FirebaseFirestore.Timestamp;
+}
+
+export interface Balance {
+  value: number;       // положительное = на стороне ребёнка, отрицательное = родители
+  maxcoins: number;    // накопленные монетки ребёнка
+  lastDriftAt: FirebaseFirestore.Timestamp;
+}
+
+export interface Settings {
+  dailyDrift: number;    // сколько очков в день дрейфует к ребёнку
+  parentIds: number[];
+  childId: number;
+  childName: string;
+}
