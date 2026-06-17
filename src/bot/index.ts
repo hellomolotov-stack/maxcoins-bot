@@ -1,4 +1,4 @@
-import { Bot, webhookCallback } from 'grammy';
+import { Bot } from 'grammy';
 import { authMiddleware } from './middleware/auth';
 import { showChildMenu, showParentMenu } from './handlers/menus';
 import { registerTaskHandlers } from './handlers/tasks';
@@ -104,7 +104,3 @@ export function createBot() {
   return bot;
 }
 
-export function createWebhookHandler() {
-  const bot = createBot();
-  return webhookCallback(bot, 'express');
-}
