@@ -1,4 +1,6 @@
 {
+  "buildCommand": "echo 'no build needed'",
+  "outputDirectory": ".",
   "crons": [
     {
       "path": "/api/cron",
