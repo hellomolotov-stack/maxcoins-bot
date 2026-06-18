@@ -59,7 +59,7 @@ export async function getPendingSubmissions(): Promise<Submission[]> {
   const snap = await db
     .collection('submissions')
     .where('status', '==', 'pending')
-    .orderBy('submittedAt', 'desc')
     .get();
-  return snap.docs.map(d => d.data() as Submission);
+  const subs = snap.docs.map(d => d.data() as Submission);
+  return subs.sort((a, b) => (b.submittedAt?.toMillis?.() ?? 0) - (a.submittedAt?.toMillis?.() ?? 0));
 }

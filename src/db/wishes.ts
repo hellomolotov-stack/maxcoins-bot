@@ -16,11 +16,11 @@ export async function createWish(
 }
 
 export async function getWishes(status?: Wish['status']): Promise<Wish[]> {
-  let query = db.collection('wishes').orderBy('createdAt', 'desc') as
-    FirebaseFirestore.Query;
+  let query: FirebaseFirestore.Query = db.collection('wishes');
   if (status) query = query.where('status', '==', status);
   const snap = await query.get();
-  return snap.docs.map(d => d.data() as Wish);
+  const wishes = snap.docs.map(d => d.data() as Wish);
+  return wishes.sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
 }
 
 export async function getWish(id: string): Promise<Wish | null> {

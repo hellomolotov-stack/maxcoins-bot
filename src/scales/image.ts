@@ -1,6 +1,6 @@
 import { createCanvas } from '@napi-rs/canvas';
 
-export function generateScalesImage(balanceValue: number): Buffer {
+export function generateScalesImage(balanceValue: number, childName: string = 'Ребёнок'): Buffer {
   const canvas = createCanvas(600, 340);
   const ctx = canvas.getContext('2d');
 
@@ -90,14 +90,14 @@ export function generateScalesImage(balanceValue: number): Buffer {
 
   ctx.fillStyle = '#854F0B';
   ctx.font = 'bold 18px sans-serif';
-  ctx.fillText('Макс', rx, rPlatY + 44);
+  ctx.fillText(childName, rx, rPlatY + 44);
 
   // статус
   ctx.fillStyle = '#2C2C2A';
   ctx.font = '16px sans-serif';
   ctx.textAlign = 'center';
   let statusText = '';
-  if (clamped > 20) statusText = '⚡ Весы на стороне Макса!';
+  if (clamped > 20) statusText = `⚡ Весы на стороне ${childName}!`;
   else if (clamped < -20) statusText = '⚡ Весы на стороне родителей';
   else statusText = '⚖ Весы почти ровные';
   ctx.fillText(statusText, cx, 310);

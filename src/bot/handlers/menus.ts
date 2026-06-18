@@ -16,28 +16,33 @@ export const parentKeyboard = new Keyboard()
   .resized().persistent();
 
 export async function showChildMenu(ctx: Context) {
-  const balance = await getBalance();
-  const text = scalesTextBlock(balance);
+  const [balance, settings] = await Promise.all([getBalance(), getSettings()]);
+  const childName = settings?.childName ?? 'Ребёнок';
+  const text = scalesTextBlock(balance, childName);
   await ctx.replyWithPhoto(
-    new InputFile(generateScalesImage(balance.value), 'scales.png'),
+    new InputFile(generateScalesImage(balance.value, childName), 'scales.png'),
     { caption: text, parse_mode: 'Markdown', reply_markup: childKeyboard }
   );
 }
 
 export async function showParentMenu(ctx: Context) {
-  const balance = await getBalance();
-  const settings = await getSettings();
+  const [balance, settings] = await Promise.all([getBalance(), getSettings()]);
+  const childName = settings?.childName ?? 'Ребёнок';
   const hasChild = settings?.childId && settings.childId !== 0;
 
-  let text = `👨‍👩‍👦 *Панель родителей*\n\n`;
-  text += hasChild ? `👶 ${settings!.childName} подключён\n` : `⚠️ Ребёнок не добавлен\n`;
-  text += `⚖️ Баланс: ${balance.value > 0 ? '+' : ''}${balance.value}\n`;
-  text += `💰 Макскоинов: ${balance.maxcoins}`;
+  const caption =
+    `👨‍👩‍👦 *Панель родителей*\n\n` +
+    (hasChild ? `👶 ${childName} подключён\n` : `⚠️ Ребёнок не добавлен\n`) +
+    `⚖️ Баланс: ${balance.value > 0 ? '+' : ''}${balance.value}\n` +
+    `💰 Макскоинов: ${balance.maxcoins}`;
 
   const actionKb = new InlineKeyboard()
     .text('📋 Задания', 'admin:tasks').text('✅ На проверке', 'admin:submissions').row()
     .text('🌟 Хотелки', 'admin:wishes').text('⚙️ Настройки', 'admin:settings');
 
-  await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: parentKeyboard });
+  await ctx.replyWithPhoto(
+    new InputFile(generateScalesImage(balance.value, childName), 'scales.png'),
+    { caption, parse_mode: 'Markdown', reply_markup: parentKeyboard }
+  );
   await ctx.reply('Выбери действие:', { reply_markup: actionKb });
 }
