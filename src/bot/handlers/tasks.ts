@@ -151,31 +151,49 @@ export function registerTaskHandlers(bot: Bot) {
     const userId = ctx.from?.id;
     if (!userId) return next();
 
-    const session = await getSession(userId);
+    let session;
+    try {
+      session = await getSession(userId);
+    } catch (e: any) {
+      console.error('getSession error in task handler:', e);
+      await ctx.reply(`⚠️ Ошибка чтения сессии: ${e?.message}`);
+      return;
+    }
 
     if (session.pendingReject) {
-      const submissionId = session.pendingReject;
-      await clearSessionKey(userId, 'pendingReject');
-      const submission = await getSubmission(submissionId);
-      if (!submission) { await ctx.reply('Не найдено'); return; }
-      await updateSubmission(submissionId, { status: 'rejected', comment: ctx.message.text });
-      await ctx.reply('✅ Отправил комментарий.', { reply_markup: parentKeyboard });
-      await ctx.api.sendMessage(
-        submission.childId,
-        `🔄 Задание *${submission.taskTitle}* нужно переделать.\n\n💬 Комментарий:\n_${ctx.message.text}_`,
-        { parse_mode: 'Markdown' }
-      );
+      try {
+        const submissionId = session.pendingReject;
+        await clearSessionKey(userId, 'pendingReject');
+        const submission = await getSubmission(submissionId);
+        if (!submission) { await ctx.reply('Не найдено'); return; }
+        await updateSubmission(submissionId, { status: 'rejected', comment: ctx.message.text });
+        await ctx.reply('✅ Отправил комментарий.', { reply_markup: parentKeyboard });
+        await ctx.api.sendMessage(
+          submission.childId,
+          `🔄 Задание *${submission.taskTitle}* нужно переделать.\n\n💬 Комментарий:\n_${ctx.message.text}_`,
+          { parse_mode: 'Markdown' }
+        );
+      } catch (e: any) {
+        console.error('pendingReject handler error:', e);
+        await ctx.reply(`⚠️ Ошибка: ${e?.message}`);
+      }
       return;
     }
 
     // Визард создания задания — черновик в отдельной коллекции
     if (session.taskDraftId) {
-      const draft = await getTaskDraft(session.taskDraftId);
-      if (!draft) {
-        await clearSessionKey(userId, 'taskDraftId');
-        return next();
+      try {
+        const draft = await getTaskDraft(session.taskDraftId);
+        if (!draft) {
+          await clearSessionKey(userId, 'taskDraftId');
+          await ctx.reply('Черновик задания не найден. Нажми «➕ Новое задание», чтобы начать заново.');
+          return;
+        }
+        await handleTaskCreationStep(ctx, userId, session.taskDraftId, draft);
+      } catch (e: any) {
+        console.error('task creation step error:', e);
+        await ctx.reply(`⚠️ Ошибка при создании задания: ${e?.message}`);
       }
-      await handleTaskCreationStep(ctx, userId, session.taskDraftId, draft);
       return;
     }
 

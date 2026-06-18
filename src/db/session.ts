@@ -34,7 +34,8 @@ export async function setSessionKey<K extends keyof SessionData>(
 }
 
 export async function clearSessionKey(userId: number, key: keyof SessionData) {
-  await col(userId).update({ [key]: admin.firestore.FieldValue.delete() });
+  // .set+merge+FieldValue.delete работает даже если документ не существует
+  await col(userId).set({ [key]: admin.firestore.FieldValue.delete() }, { merge: true });
 }
 
 export async function createTaskDraft(userId: number): Promise<string> {

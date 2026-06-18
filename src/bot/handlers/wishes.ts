@@ -108,40 +108,53 @@ export function registerWishHandlers(bot: Bot) {
     const userId = ctx.from?.id;
     if (!userId) return next();
 
-    const session = await getSession(userId);
-    if (session.wishDraft === undefined) return next();
-
-    const draft = session.wishDraft;
-    const text = ctx.message.text;
-
-    if (!draft.title) {
-      await setSessionKey(userId, 'wishDraft', { title: text });
-      await ctx.reply('💰 Шаг 2/2: Сколько Макскоинов должна стоить эта хотелка?');
+    let session;
+    try {
+      session = await getSession(userId);
+    } catch (e: any) {
+      console.error('getSession error in wish handler:', e);
+      await ctx.reply(`⚠️ Ошибка чтения сессии: ${e?.message}`);
       return;
     }
 
-    const cost = parseInt(text, 10);
-    if (isNaN(cost) || cost <= 0) { await ctx.reply('Напиши целое число, например: 50'); return; }
+    if (session.wishDraft === undefined) return next();
 
-    await clearSessionKey(userId, 'wishDraft');
-    const wish = await createWish({ title: draft.title, cost, proposedBy: userId, status: 'pending' });
+    try {
+      const draft = session.wishDraft;
+      const text = ctx.message.text;
 
-    await ctx.reply(
-      `✅ Предложение отправлено родителям!\n\n✨ ${wish.title}\n💰 ${wish.cost} Макскоинов\n\nЖди ответа 🙏`,
-      { reply_markup: childKeyboard }
-    );
+      if (!draft.title) {
+        await setSessionKey(userId, 'wishDraft', { title: text });
+        await ctx.reply('💰 Шаг 2/2: Сколько Макскоинов должна стоить эта хотелка?');
+        return;
+      }
 
-    const settings = await getSettings() as Settings;
-    const keyboard = new InlineKeyboard()
-      .text('✅ Одобрить', `admin:wishes:approve:${wish.id}`)
-      .text('❌ Отклонить', `admin:wishes:reject:${wish.id}`);
+      const cost = parseInt(text, 10);
+      if (isNaN(cost) || cost <= 0) { await ctx.reply('Напиши целое число, например: 50'); return; }
 
-    for (const parentId of settings.parentIds) {
-      await ctx.api.sendMessage(
-        parentId,
-        `💌 *${settings.childName} предложил хотелку!*\n\n✨ ${wish.title}\n💰 Цена: ${wish.cost} Макскоинов`,
-        { parse_mode: 'Markdown', reply_markup: keyboard }
+      await clearSessionKey(userId, 'wishDraft');
+      const wish = await createWish({ title: draft.title, cost, proposedBy: userId, status: 'pending' });
+
+      await ctx.reply(
+        `✅ Предложение отправлено родителям!\n\n✨ ${wish.title}\n💰 ${wish.cost} Макскоинов\n\nЖди ответа 🙏`,
+        { reply_markup: childKeyboard }
       );
+
+      const settings = await getSettings() as Settings;
+      const keyboard = new InlineKeyboard()
+        .text('✅ Одобрить', `admin:wishes:approve:${wish.id}`)
+        .text('❌ Отклонить', `admin:wishes:reject:${wish.id}`);
+
+      for (const parentId of settings.parentIds) {
+        await ctx.api.sendMessage(
+          parentId,
+          `💌 *${settings.childName} предложил хотелку!*\n\n✨ ${wish.title}\n💰 Цена: ${wish.cost} Макскоинов`,
+          { parse_mode: 'Markdown', reply_markup: keyboard }
+        );
+      }
+    } catch (e: any) {
+      console.error('wish proposal handler error:', e);
+      await ctx.reply(`⚠️ Ошибка при создании хотелки: ${e?.message}`);
     }
   });
 

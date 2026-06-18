@@ -248,5 +248,11 @@ export function createBot() {
   registerTaskHandlers(bot);
   registerWishHandlers(bot);
 
+  bot.catch((err) => {
+    const ctx = err.ctx;
+    console.error('grammY error:', err.error);
+    ctx.reply(`⚠️ Внутренняя ошибка: ${String(err.error)}`).catch(() => {});
+  });
+
   return bot;
 }
