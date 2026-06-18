@@ -4,7 +4,10 @@ import {
   updateSubmission, getSubmission, getPendingSubmissions, deactivateTask,
 } from '../../db/tasks';
 import { addMaxcoins, getSettings } from '../../db/balance';
-import { getSession, setSessionKey, clearSessionKey } from '../../db/session';
+import {
+  getSession, setSessionKey, clearSessionKey,
+  createTaskDraft, getTaskDraft, updateTaskDraft, deleteTaskDraft,
+} from '../../db/session';
 import { Settings } from '../../types';
 import { childKeyboard, parentKeyboard } from './menus';
 
@@ -165,8 +168,14 @@ export function registerTaskHandlers(bot: Bot) {
       return;
     }
 
-    if (session.taskDraft !== undefined) {
-      await handleTaskCreationStep(ctx, userId, session.taskDraft);
+    // Визард создания задания — черновик в отдельной коллекции
+    if (session.taskDraftId) {
+      const draft = await getTaskDraft(session.taskDraftId);
+      if (!draft) {
+        await clearSessionKey(userId, 'taskDraftId');
+        return next();
+      }
+      await handleTaskCreationStep(ctx, userId, session.taskDraftId, draft);
       return;
     }
 
@@ -175,24 +184,25 @@ export function registerTaskHandlers(bot: Bot) {
 
   bot.callbackQuery('admin:tasks:new', async (ctx) => {
     await ctx.answerCallbackQuery();
-    await setSessionKey(ctx.from.id, 'taskDraft', {});
+    const draftId = await createTaskDraft(ctx.from.id);
     await ctx.reply('📝 *Новое задание*\n\nШаг 1/4: Как называется задание?', { parse_mode: 'Markdown' });
   });
 
   async function handleTaskCreationStep(
     ctx: Context,
     userId: number,
+    draftId: string,
     draft: { title?: string; description?: string; reward?: number }
   ) {
     const text = (ctx.message as any)?.text as string;
 
     if (!draft.title) {
-      await setSessionKey(userId, 'taskDraft', { ...draft, title: text });
+      await updateTaskDraft(draftId, { title: text });
       await ctx.reply('📄 Шаг 2/4: Опиши — что именно нужно сделать:');
       return;
     }
     if (!draft.description) {
-      await setSessionKey(userId, 'taskDraft', { ...draft, description: text });
+      await updateTaskDraft(draftId, { description: text });
       await ctx.reply('💰 Шаг 3/4: Сколько Макскоинов за выполнение?');
       return;
     }
@@ -202,27 +212,32 @@ export function registerTaskHandlers(bot: Bot) {
         await ctx.reply('Напиши целое число, например: 10');
         return;
       }
-      await setSessionKey(userId, 'taskDraft', { ...draft, reward });
+      await updateTaskDraft(draftId, { reward });
+      // ID черновика вшит прямо в callback data — не зависит от сессии
       const keyboard = new InlineKeyboard()
-        .text('1️⃣ Разовое', 'tasktype:once').row()
-        .text('🔄 Каждый день', 'tasktype:recurring');
+        .text('1️⃣ Разовое', `tt:once:${draftId}`).row()
+        .text('🔄 Каждый день', `tt:rec:${draftId}`);
       await ctx.reply('📅 Шаг 4/4: Задание разовое или повторяется каждый день?', { reply_markup: keyboard });
     }
   }
 
-  bot.callbackQuery(/^tasktype:(once|recurring)$/, async (ctx) => {
+  // Callback data содержит ID черновика — загружаем напрямую, без сессии
+  bot.callbackQuery(/^tt:(once|rec):(.+)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
     const userId = ctx.from.id;
-    const session = await getSession(userId);
-    const draft = session.taskDraft;
+    const typeKey = ctx.match[1];
+    const draftId = ctx.match[2];
+    const type: 'once' | 'recurring' = typeKey === 'once' ? 'once' : 'recurring';
 
+    const draft = await getTaskDraft(draftId);
     if (!draft?.title || !draft.description || !draft.reward) {
-      await ctx.reply('Сессия истекла. Начни создание задания заново — нажми «➕ Новое задание».');
+      await ctx.reply('Черновик не найден. Нажми «➕ Новое задание» чтобы начать заново.');
       return;
     }
 
-    const type = ctx.match[1] as 'once' | 'recurring';
-    await clearSessionKey(userId, 'taskDraft');
+    // Очищаем черновик
+    await deleteTaskDraft(draftId);
+    await clearSessionKey(userId, 'taskDraftId').catch(() => {});
 
     const task = await createTask({
       title: draft.title,

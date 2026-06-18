@@ -14,10 +14,6 @@ import { getSession, setSessionKey, clearSessionKey } from '../db/session';
 export function createBot() {
   const bot = new Bot(process.env.BOT_TOKEN!);
 
-  bot.catch((err) => {
-    console.error('Bot error:', err.message);
-  });
-
   // /setup — регистрируется ДО authMiddleware (бот ещё не настроен)
   bot.command('setup', async (ctx) => {
     const { db } = await import('../db/firebase');
