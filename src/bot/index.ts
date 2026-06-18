@@ -1,13 +1,23 @@
-import { Bot } from 'grammy';
+import { Bot, InlineKeyboard } from 'grammy';
 import { authMiddleware } from './middleware/auth';
-import { showChildMenu, showParentMenu } from './handlers/menus';
-import { registerTaskHandlers } from './handlers/tasks';
-import { registerWishHandlers } from './handlers/wishes';
+import {
+  showChildMenu, showParentMenu, childKeyboard, parentKeyboard,
+} from './handlers/menus';
+import {
+  registerTaskHandlers, showTaskListForChild, showAdminTasksPanel, showAdminSubmissions,
+} from './handlers/tasks';
+import {
+  registerWishHandlers, showWishesForChild, showAdminWishesPanel, startWishProposal,
+} from './handlers/wishes';
+
+type SetupStep = 'id' | 'name';
+const pendingChildSetup = new Map<number, { step: SetupStep; childId?: number }>();
+const pendingAddChild = new Map<number, { step: SetupStep; childId?: number }>();
 
 export function createBot() {
   const bot = new Bot(process.env.BOT_TOKEN!);
 
-  // /setup должен работать до authMiddleware (бот ещё не настроен)
+  // /setup — регистрируется ДО authMiddleware (бот ещё не настроен)
   bot.command('setup', async (ctx) => {
     const { db } = await import('../db/firebase');
     const userId = ctx.from?.id;
@@ -16,7 +26,7 @@ export function createBot() {
     await db.collection('config').doc('settings').set({
       parentIds: [userId],
       childId: 0,
-      childName: 'Макс',
+      childName: 'Ребёнок',
       dailyDrift: 10,
     });
 
@@ -26,16 +36,112 @@ export function createBot() {
       lastDriftAt: new Date(),
     });
 
+    pendingChildSetup.set(userId, { step: 'id' });
+
     await ctx.reply(
-      `✅ Бот настроен!\n\nТы добавлен как родитель.\n\n` +
-      `Для добавления ребёнка используй /addchild\n` +
-      `Для добавления второго родителя используй /addparent`
+      `✅ *Бот настроен!* Ты добавлен как родитель.\n\n` +
+      `Теперь добавим ребёнка.\n\n` +
+      `*Шаг 1/2:* Введи Telegram ID ребёнка\n` +
+      `_Его можно узнать: попроси ребёнка написать_ @userinfobot`,
+      { parse_mode: 'Markdown' }
     );
   });
 
+  // Обработка текстов ДО authMiddleware — визарды setup и addchild
+  bot.on('message:text', async (ctx, next) => {
+    const userId = ctx.from?.id;
+    if (!userId) return next();
+
+    // Визард первичной настройки (после /setup)
+    if (pendingChildSetup.has(userId)) {
+      const state = pendingChildSetup.get(userId)!;
+      const text = ctx.message.text.trim();
+
+      if (state.step === 'id') {
+        const childId = parseInt(text, 10);
+        if (isNaN(childId) || childId <= 0) {
+          await ctx.reply(
+            'Не похоже на Telegram ID 🤔\n\nВведи числовой ID, например: `6603463762`\n\n' +
+            '_Узнать через_ @userinfobot',
+            { parse_mode: 'Markdown' }
+          );
+          return;
+        }
+        state.childId = childId;
+        state.step = 'name';
+        pendingChildSetup.set(userId, state);
+        await ctx.reply('👶 *Шаг 2/2:* Как зовут ребёнка? (например: Макс)', { parse_mode: 'Markdown' });
+        return;
+      }
+
+      if (state.step === 'name') {
+        const childName = text;
+        const childId = state.childId!;
+        pendingChildSetup.delete(userId);
+
+        const { db } = await import('../db/firebase');
+        await db.collection('config').doc('settings').update({ childId, childName });
+
+        await ctx.reply(
+          `✅ *${childName} добавлен!*\n\nБот полностью готов к работе.\n` +
+          `Попроси ${childName} написать /start этому боту.`,
+          { parse_mode: 'Markdown', reply_markup: parentKeyboard }
+        );
+        await showParentMenu(ctx);
+        return;
+      }
+    }
+
+    // Визард добавления ребёнка (после /addchild без аргументов)
+    if (pendingAddChild.has(userId)) {
+      const state = pendingAddChild.get(userId)!;
+      const text = ctx.message.text.trim();
+
+      if (state.step === 'id') {
+        const childId = parseInt(text, 10);
+        if (isNaN(childId) || childId <= 0) {
+          await ctx.reply('Введи числовой Telegram ID, например: `6603463762`', { parse_mode: 'Markdown' });
+          return;
+        }
+        state.childId = childId;
+        state.step = 'name';
+        pendingAddChild.set(userId, state);
+        await ctx.reply('👶 Как зовут ребёнка?');
+        return;
+      }
+
+      if (state.step === 'name') {
+        const childName = text;
+        const childId = state.childId!;
+        pendingAddChild.delete(userId);
+
+        const { db } = await import('../db/firebase');
+        await db.collection('config').doc('settings').update({ childId, childName });
+
+        await ctx.reply(`✅ *${childName} добавлен!* ID: ${childId}`, { parse_mode: 'Markdown' });
+        return;
+      }
+    }
+
+    return next();
+  });
+
+  // Далее все обработчики работают через authMiddleware
   bot.use(authMiddleware);
 
-  bot.command('start', async (ctx) => {
+  // "В меню" — кнопки возврата
+  bot.callbackQuery('main:child', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await showChildMenu(ctx);
+  });
+
+  bot.callbackQuery('main:parent', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await showParentMenu(ctx);
+  });
+
+  // /start и /menu — всегда показывают главное меню
+  bot.command(['start', 'menu'], async (ctx) => {
     const role = (ctx as any).userRole;
     if (role === 'child') {
       await showChildMenu(ctx);
@@ -44,56 +150,110 @@ export function createBot() {
     }
   });
 
-  bot.command('menu', async (ctx) => {
-    const role = (ctx as any).userRole;
+  // Роутинг постоянной клавиатуры
+  bot.on('message:text', async (ctx, next) => {
+    const role = (ctx as any).userRole as string | undefined;
+    const text = ctx.message.text;
+
     if (role === 'child') {
-      await showChildMenu(ctx);
-    } else {
-      await showParentMenu(ctx);
+      if (text === '⚖️ Весы') { await showChildMenu(ctx); return; }
+      if (text === '📋 Задания') { await showTaskListForChild(ctx); return; }
+      if (text === '🌟 Хотелки') { await showWishesForChild(ctx); return; }
+      if (text === '➕ Предложить хотелку') {
+        startWishProposal(ctx.from.id);
+        await ctx.reply(
+          '✨ *Новая хотелка*\n\nШаг 1/2: Что ты хочешь? Напиши название:',
+          { parse_mode: 'Markdown' }
+        );
+        return;
+      }
     }
+
+    if (role === 'parent') {
+      if (text === '📊 Статус') { await showParentMenu(ctx); return; }
+      if (text === '📋 Задания') { await showAdminTasksPanel(ctx); return; }
+      if (text === '✅ На проверке') { await showAdminSubmissions(ctx); return; }
+      if (text === '🌟 Хотелки') { await showAdminWishesPanel(ctx); return; }
+    }
+
+    return next();
   });
 
+  // /addchild — с визардом если нет аргументов
   bot.command('addchild', async (ctx) => {
-    const { db } = await import('../db/firebase');
+    const userId = ctx.from?.id;
+    if (!userId) return;
     const args = ctx.message?.text?.split(' ');
-    const childId = args?.[1] ? parseInt(args[1], 10) : null;
-    const childName = args?.[2] ?? 'Макс';
 
-    if (!childId) {
-      await ctx.reply('Использование: /addchild <telegram_id> <имя>\n\nID можно узнать через @userinfobot');
-      return;
+    if (args && args.length >= 2) {
+      const childId = parseInt(args[1], 10);
+      const childName = args[2] ?? 'Макс';
+      if (!isNaN(childId) && childId > 0) {
+        const { db } = await import('../db/firebase');
+        await db.collection('config').doc('settings').update({ childId, childName });
+        await ctx.reply(`✅ *${childName} добавлен!* ID: ${childId}`, { parse_mode: 'Markdown' });
+        return;
+      }
     }
 
-    await db.collection('config').doc('settings').update({ childId, childName });
-    await ctx.reply(`✅ Ребёнок добавлен! ID: ${childId}, имя: ${childName}`);
+    pendingAddChild.set(userId, { step: 'id' });
+    await ctx.reply(
+      `👶 *Добавление ребёнка*\n\n` +
+      `*Шаг 1/2:* Введи Telegram ID ребёнка\n` +
+      `_Узнать через_ @userinfobot`,
+      { parse_mode: 'Markdown' }
+    );
   });
 
+  // /addparent
   bot.command('addparent', async (ctx) => {
     const { db } = await import('../db/firebase');
-    const { admin } = await import('../db/firebase').then(m => ({ admin: require('firebase-admin') }));
     const args = ctx.message?.text?.split(' ');
     const parentId = args?.[1] ? parseInt(args[1], 10) : null;
 
-    if (!parentId) {
-      await ctx.reply('Использование: /addparent <telegram_id>');
+    if (!parentId || isNaN(parentId)) {
+      await ctx.reply(
+        'Использование: `/addparent <telegram_id>`\n_ID узнать через_ @userinfobot',
+        { parse_mode: 'Markdown' }
+      );
       return;
     }
 
-    await db.collection('config').doc('settings').update({
-      parentIds: admin.firestore.FieldValue.arrayUnion(parentId),
-    });
+    // Читаем текущий список и добавляем
+    const snap = await db.collection('config').doc('settings').get();
+    const currentIds: number[] = snap.data()?.parentIds ?? [];
+    if (!currentIds.includes(parentId)) {
+      await db.collection('config').doc('settings').update({
+        parentIds: [...currentIds, parentId],
+      });
+    }
+
     await ctx.reply(`✅ Родитель добавлен! ID: ${parentId}`);
   });
 
+  // Настройки
   bot.callbackQuery('admin:settings', async (ctx) => {
     await ctx.answerCallbackQuery();
     const { getSettings } = await import('../db/balance');
     const settings = await getSettings();
+    const keyboard = new InlineKeyboard()
+      .text('👶 Сменить ребёнка', 'settings:change_child').row()
+      .text('🏠 В меню', 'main:parent');
     await ctx.reply(
       `⚙️ *Настройки*\n\n` +
       `👶 Ребёнок: ${settings.childName} (ID: ${settings.childId})\n` +
-      `👨‍👩‍👦 Родители: ${settings.parentIds.join(', ')}\n` +
-      `📉 Ежедневный дрейф: ${settings.dailyDrift} очков`,
+      `👨‍👩‍👦 Родителей: ${settings.parentIds.length}\n` +
+      `📉 Дрейф: ${settings.dailyDrift} очков/день`,
+      { parse_mode: 'Markdown', reply_markup: keyboard }
+    );
+  });
+
+  bot.callbackQuery('settings:change_child', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const userId = ctx.from.id;
+    pendingAddChild.set(userId, { step: 'id' });
+    await ctx.reply(
+      '👶 Введи новый Telegram ID ребёнка\n_Узнать через_ @userinfobot',
       { parse_mode: 'Markdown' }
     );
   });
@@ -103,4 +263,3 @@ export function createBot() {
 
   return bot;
 }
-
