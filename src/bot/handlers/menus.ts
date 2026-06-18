@@ -5,12 +5,14 @@ import { generateScalesImage } from '../../scales/image';
 
 export const childKeyboard = new Keyboard()
   .text('⚖️ Весы').text('📋 Задания').row()
-  .text('🌟 Хотелки').text('➕ Предложить хотелку')
+  .text('🌟 Хотелки').text('➕ Предложить хотелку').row()
+  .text('🙏🏻 Важно поговорить')
   .resized().persistent();
 
 export const parentKeyboard = new Keyboard()
   .text('📊 Статус').text('📋 Задания').row()
-  .text('✅ На проверке').text('🌟 Хотелки')
+  .text('✅ На проверке').text('🌟 Хотелки').row()
+  .text('➕ Добавить задание').text('‼️ Отвлечение ‼️')
   .resized().persistent();
 
 export async function showChildMenu(ctx: Context) {

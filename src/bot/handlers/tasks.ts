@@ -262,7 +262,7 @@ export function registerTaskHandlers(bot: Bot) {
       description: draft.description,
       reward: draft.reward,
       type,
-      recurringSchedule: type === 'recurring' ? 'daily' : undefined,
+      ...(type === 'recurring' ? { recurringSchedule: 'daily' as const } : {}),
       active: true,
     });
 

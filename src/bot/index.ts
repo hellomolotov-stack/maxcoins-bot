@@ -9,7 +9,8 @@ import {
 import {
   registerWishHandlers, showWishesForChild, showAdminWishesPanel, startWishProposal,
 } from './handlers/wishes';
-import { getSession, setSessionKey, clearSessionKey } from '../db/session';
+import { getSession, setSessionKey, clearSessionKey, createTaskDraft } from '../db/session';
+import { spendMaxcoins, getSettings } from '../db/balance';
 
 export function createBot() {
   const bot = new Bot(process.env.BOT_TOKEN!);
@@ -108,6 +109,7 @@ export function createBot() {
         const { db } = await import('../db/firebase');
         await db.collection('config').doc('settings').update({ childId, childName });
         await ctx.reply(`✅ *${childName} добавлен!* ID: ${childId}`, { parse_mode: 'Markdown' });
+        await showParentMenu(ctx);
         return;
       }
     }
@@ -156,6 +158,18 @@ export function createBot() {
         );
         return;
       }
+      if (text === '🙏🏻 Важно поговорить') {
+        const settings = await getSettings();
+        for (const parentId of settings.parentIds) {
+          await ctx.api.sendMessage(
+            parentId,
+            `🙏🏻 *${settings.childName} хочет поговорить!*\n\nОн нажал кнопку «Важно поговорить». Найди время его выслушать.`,
+            { parse_mode: 'Markdown' }
+          );
+        }
+        await ctx.reply('✅ Родители уведомлены! Скоро поговорят с тобой 🤗');
+        return;
+      }
     }
 
     if (role === 'parent') {
@@ -163,6 +177,29 @@ export function createBot() {
       if (text === '📋 Задания') { await showAdminTasksPanel(ctx); return; }
       if (text === '✅ На проверке') { await showAdminSubmissions(ctx); return; }
       if (text === '🌟 Хотелки') { await showAdminWishesPanel(ctx); return; }
+      if (text === '➕ Добавить задание') {
+        await createTaskDraft(ctx.from!.id);
+        await ctx.reply('📝 *Новое задание*\n\nШаг 1/4: Как называется задание?', { parse_mode: 'Markdown' });
+        return;
+      }
+      if (text === '‼️ Отвлечение ‼️') {
+        const settings = await getSettings();
+        if (!settings?.childId) {
+          await ctx.reply('⚠️ Ребёнок не добавлен в бот.');
+          return;
+        }
+        const newBalance = await spendMaxcoins(5);
+        await ctx.api.sendMessage(
+          settings.childId,
+          `⚖️ Ты потерял 5 Максокинов за отвлечение.\n\n` +
+          `В следующий раз:\n` +
+          `1. Убедись, что родитель не говорил тебе, что будет занят.\n` +
+          `2. Если не говорил, молча подойди к нему, посмотри издалека и убедись, что родитель не занят. Если он занят – он нажмёт кнопку «‼️ Отвлечение ‼️» и это повлияет на твои весы.\n\n` +
+          `Если же у тебя что-то срочное, и ты хочешь отвлечь его от работы, в следующий раз прежде, чем подойти нажми кнопку «🙏🏻 Важно поговорить»`
+        );
+        await ctx.reply(`✅ Списано 5 Макскоинов.\n💰 У ${settings.childName}: ${newBalance.maxcoins} монет`);
+        return;
+      }
     }
 
     return next();
@@ -181,6 +218,7 @@ export function createBot() {
         const { db } = await import('../db/firebase');
         await db.collection('config').doc('settings').update({ childId, childName });
         await ctx.reply(`✅ *${childName} добавлен!* ID: ${childId}`, { parse_mode: 'Markdown' });
+        await showParentMenu(ctx);
         return;
       }
     }
