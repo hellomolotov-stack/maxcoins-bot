@@ -4,6 +4,7 @@ import { spendMaxcoins, getBalance, getSettings } from '../../db/balance';
 import { getSession, setSessionKey, clearSessionKey } from '../../db/session';
 import { Settings } from '../../types';
 import { childKeyboard } from './menus';
+import { GIF } from '../gifs';
 
 export function startWishProposal(userId: number): Promise<void> {
   return setSessionKey(userId, 'wishDraft', {});
@@ -81,11 +82,13 @@ export function registerWishHandlers(bot: Bot) {
     await updateWishStatus(wish.id, 'redeemed');
     const newBalance = await spendMaxcoins(wish.cost);
 
-    await ctx.reply(
-      `🎁 Ты активировал хотелку *${wish.title}*!\n\n` +
-      `Потрачено: ${wish.cost} 🪙\nОсталось: ${newBalance.maxcoins} 🪙\n\nРодители скоро исполнят! 🎉`,
-      { parse_mode: 'Markdown', reply_markup: childKeyboard }
-    );
+    await ctx.replyWithAnimation(GIF.WISH_REDEEMED, {
+      caption:
+        `🎁 Ты активировал хотелку *${wish.title}*!\n\n` +
+        `Потрачено: ${wish.cost} 🪙\nОсталось: ${newBalance.maxcoins} 🪙\n\nРодители скоро исполнят! 🎉`,
+      parse_mode: 'Markdown',
+      reply_markup: childKeyboard,
+    });
 
     const settings = await getSettings() as Settings;
     for (const parentId of settings.parentIds) {
@@ -172,10 +175,14 @@ export function registerWishHandlers(bot: Bot) {
     await ctx.editMessageText(`✅ Одобрена: *${wish.title}* (${wish.cost} 🪙)`, { parse_mode: 'Markdown' });
 
     const settings = await getSettings() as Settings;
-    await ctx.api.sendMessage(
+    await ctx.api.sendAnimation(
       settings.childId,
-      `🎉 Родители одобрили хотелку *${wish.title}*!\n\nНакопи ${wish.cost} Макскоинов и она станет доступна. 🌟`,
-      { parse_mode: 'Markdown' }
+      GIF.WISH_APPROVED,
+      {
+        caption:
+          `🎉 Родители одобрили хотелку *${wish.title}*!\n\nНакопи ${wish.cost} Макскоинов и она станет доступна. 🌟`,
+        parse_mode: 'Markdown',
+      }
     );
   });
 
@@ -188,10 +195,13 @@ export function registerWishHandlers(bot: Bot) {
     await ctx.editMessageText(`❌ Отклонена: ${wish.title}`);
 
     const settings = await getSettings() as Settings;
-    await ctx.api.sendMessage(
+    await ctx.api.sendAnimation(
       settings.childId,
-      `😔 Родители пока не одобрили хотелку *${wish.title}*.\nПопробуй предложить что-то другое.`,
-      { parse_mode: 'Markdown' }
+      GIF.WISH_REJECTED,
+      {
+        caption: `😔 Родители пока не одобрили хотелку *${wish.title}*.\nПопробуй предложить что-то другое.`,
+        parse_mode: 'Markdown',
+      }
     );
   });
 }

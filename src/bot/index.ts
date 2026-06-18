@@ -11,6 +11,7 @@ import {
 } from './handlers/wishes';
 import { getSession, setSessionKey, clearSessionKey, createTaskDraft } from '../db/session';
 import { spendMaxcoins, getSettings } from '../db/balance';
+import { GIF } from './gifs';
 
 export function createBot() {
   const bot = new Bot(process.env.BOT_TOKEN!);
@@ -135,8 +136,10 @@ export function createBot() {
   bot.command(['start', 'menu'], async (ctx) => {
     const role = (ctx as any).userRole;
     if (role === 'child') {
+      await ctx.replyWithAnimation(GIF.WELCOME, { caption: '👋 Привет! Вот твои весы:' });
       await showChildMenu(ctx);
     } else {
+      await ctx.replyWithAnimation(GIF.WELCOME, { caption: '👋 Панель родителей:' });
       await showParentMenu(ctx);
     }
   });
@@ -161,10 +164,13 @@ export function createBot() {
       if (text === '🙏🏻 Важно поговорить') {
         const settings = await getSettings();
         for (const parentId of settings.parentIds) {
-          await ctx.api.sendMessage(
+          await ctx.api.sendAnimation(
             parentId,
-            `🙏🏻 *${settings.childName} хочет поговорить!*\n\nОн нажал кнопку «Важно поговорить». Найди время его выслушать.`,
-            { parse_mode: 'Markdown' }
+            GIF.CHILD_WANTS_TALK,
+            {
+              caption: `🙏🏻 *${settings.childName} хочет поговорить!*\n\nОн нажал кнопку «Важно поговорить». Найди время его выслушать.`,
+              parse_mode: 'Markdown',
+            }
           );
         }
         await ctx.reply('✅ Родители уведомлены! Скоро поговорят с тобой 🤗');
@@ -189,13 +195,17 @@ export function createBot() {
           return;
         }
         const newBalance = await spendMaxcoins(5);
-        await ctx.api.sendMessage(
+        await ctx.api.sendAnimation(
           settings.childId,
-          `⚖️ Ты потерял 5 Максокинов за отвлечение.\n\n` +
-          `В следующий раз:\n` +
-          `1. Убедись, что родитель не говорил тебе, что будет занят.\n` +
-          `2. Если не говорил, молча подойди к нему, посмотри издалека и убедись, что родитель не занят. Если он занят – он нажмёт кнопку «‼️ Отвлечение ‼️» и это повлияет на твои весы.\n\n` +
-          `Если же у тебя что-то срочное, и ты хочешь отвлечь его от работы, в следующий раз прежде, чем подойти нажми кнопку «🙏🏻 Важно поговорить»`
+          GIF.DISTRACTION,
+          {
+            caption:
+              `⚖️ Ты потерял 5 Максокинов за отвлечение.\n\n` +
+              `В следующий раз:\n` +
+              `1. Убедись, что родитель не говорил тебе, что будет занят.\n` +
+              `2. Если не говорил, молча подойди к нему, посмотри издалека и убедись, что родитель не занят. Если он занят – он нажмёт кнопку «‼️ Отвлечение ‼️» и это повлияет на твои весы.\n\n` +
+              `Если же у тебя что-то срочное, и ты хочешь отвлечь его от работы, в следующий раз прежде, чем подойти нажми кнопку «🙏🏻 Важно поговорить»`,
+          }
         );
         await ctx.reply(`✅ Списано 5 Макскоинов.\n💰 У ${settings.childName}: ${newBalance.maxcoins} монет`);
         return;

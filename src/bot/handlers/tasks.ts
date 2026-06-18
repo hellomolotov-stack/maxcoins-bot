@@ -10,6 +10,7 @@ import {
 } from '../../db/session';
 import { Settings } from '../../types';
 import { childKeyboard, parentKeyboard } from './menus';
+import { GIF } from '../gifs';
 
 export async function showTaskListForChild(ctx: Context) {
   const tasks = await getActiveTasks();
@@ -100,7 +101,10 @@ export function registerTaskHandlers(bot: Bot) {
       taskId, taskTitle: task.title, childId: userId, photoFileId, status: 'pending',
     });
 
-    await ctx.reply('✅ Отправил! Жди, пока родители проверят. 🕐', { reply_markup: childKeyboard });
+    await ctx.replyWithAnimation(GIF.TASK_SUBMITTED, {
+      caption: '✅ Отправил! Жди, пока родители проверят. 🕐',
+      reply_markup: childKeyboard,
+    });
 
     const settings = await getSettings() as Settings;
     const keyboard = new InlineKeyboard()
@@ -133,11 +137,15 @@ export function registerTaskHandlers(bot: Bot) {
 
     await ctx.editMessageCaption({ caption: `✅ Принято! Начислено ${reward} Макскоинов.` });
 
-    await ctx.api.sendMessage(
+    await ctx.api.sendAnimation(
       submission.childId,
-      `🎉 Родители приняли задание *${submission.taskTitle}*!\n\n` +
-      `💰 Ты получил *${reward} Макскоинов*.\n💼 Всего: *${balance.maxcoins}*`,
-      { parse_mode: 'Markdown' }
+      GIF.TASK_APPROVED,
+      {
+        caption:
+          `🎉 Родители приняли задание *${submission.taskTitle}*!\n\n` +
+          `💰 Ты получил *${reward} Макскоинов*.\n💼 Всего: *${balance.maxcoins}*`,
+        parse_mode: 'Markdown',
+      }
     );
   });
 
@@ -168,10 +176,14 @@ export function registerTaskHandlers(bot: Bot) {
         if (!submission) { await ctx.reply('Не найдено'); return; }
         await updateSubmission(submissionId, { status: 'rejected', comment: ctx.message.text });
         await ctx.reply('✅ Отправил комментарий.', { reply_markup: parentKeyboard });
-        await ctx.api.sendMessage(
+        await ctx.api.sendAnimation(
           submission.childId,
-          `🔄 Задание *${submission.taskTitle}* нужно переделать.\n\n💬 Комментарий:\n_${ctx.message.text}_`,
-          { parse_mode: 'Markdown' }
+          GIF.TASK_REJECTED,
+          {
+            caption:
+              `🔄 Задание *${submission.taskTitle}* нужно переделать.\n\n💬 Комментарий:\n_${ctx.message.text}_`,
+            parse_mode: 'Markdown',
+          }
         );
       } catch (e: any) {
         console.error('pendingReject handler error:', e);
