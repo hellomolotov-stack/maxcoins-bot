@@ -5,10 +5,15 @@ export async function authMiddleware(ctx: Context, next: NextFunction) {
   const userId = ctx.from?.id;
   if (!userId) return;
 
-  const settings = await getSettings();
-  if (!settings) {
-    // бот ещё не настроен
-    await ctx.reply('Бот ещё не настроен. Попросите родителей запустить /setup');
+  let settings;
+  try {
+    settings = await getSettings();
+  } catch {
+    settings = null;
+  }
+
+  if (!settings || !settings.parentIds) {
+    await ctx.reply('Бот ещё не настроен. Запусти /setup');
     return;
   }
 
@@ -16,11 +21,10 @@ export async function authMiddleware(ctx: Context, next: NextFunction) {
   const isChild = userId === settings.childId;
 
   if (!isParent && !isChild) {
-    await ctx.reply('Тебя нет в списке пользователей. Попросите родителей добавить тебя.');
+    await ctx.reply('Тебя нет в списке пользователей. Попроси родителей добавить тебя.');
     return;
   }
 
-  // кладём роль в контекст
   (ctx as any).userRole = isParent ? 'parent' : 'child';
   (ctx as any).settings = settings;
 

@@ -21,6 +21,7 @@ export async function getBalance(): Promise<Balance> {
 
 export async function getSettings(): Promise<Settings> {
   const snap = await settingsRef().get();
+  if (!snap.exists) return null as any;
   return snap.data() as Settings;
 }
 

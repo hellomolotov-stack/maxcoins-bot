@@ -14,6 +14,10 @@ import { getSession, setSessionKey, clearSessionKey } from '../db/session';
 export function createBot() {
   const bot = new Bot(process.env.BOT_TOKEN!);
 
+  bot.catch((err) => {
+    console.error('Bot error:', err.message);
+  });
+
   // /setup — регистрируется ДО authMiddleware (бот ещё не настроен)
   bot.command('setup', async (ctx) => {
     const { db } = await import('../db/firebase');
@@ -149,7 +153,7 @@ export function createBot() {
       if (text === '📋 Задания') { await showTaskListForChild(ctx); return; }
       if (text === '🌟 Хотелки') { await showWishesForChild(ctx); return; }
       if (text === '➕ Предложить хотелку') {
-        startWishProposal(ctx.from.id);
+        await startWishProposal(ctx.from.id);
         await ctx.reply(
           '✨ *Новая хотелка*\n\nШаг 1/2: Что ты хочешь? Напиши название:',
           { parse_mode: 'Markdown' }
