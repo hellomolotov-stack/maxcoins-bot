@@ -9,10 +9,7 @@ import {
 import {
   registerWishHandlers, showWishesForChild, showAdminWishesPanel, startWishProposal,
 } from './handlers/wishes';
-
-type SetupStep = 'id' | 'name';
-const pendingChildSetup = new Map<number, { step: SetupStep; childId?: number }>();
-const pendingAddChild = new Map<number, { step: SetupStep; childId?: number }>();
+import { getSession, setSessionKey, clearSessionKey } from '../db/session';
 
 export function createBot() {
   const bot = new Bot(process.env.BOT_TOKEN!);
@@ -36,7 +33,7 @@ export function createBot() {
       lastDriftAt: new Date(),
     });
 
-    pendingChildSetup.set(userId, { step: 'id' });
+    await setSessionKey(userId, 'childSetup', { step: 'id' });
 
     await ctx.reply(
       `✅ *Бот настроен!* Ты добавлен как родитель.\n\n` +
@@ -52,24 +49,23 @@ export function createBot() {
     const userId = ctx.from?.id;
     if (!userId) return next();
 
+    const session = await getSession(userId);
+
     // Визард первичной настройки (после /setup)
-    if (pendingChildSetup.has(userId)) {
-      const state = pendingChildSetup.get(userId)!;
+    if (session.childSetup) {
+      const state = session.childSetup;
       const text = ctx.message.text.trim();
 
       if (state.step === 'id') {
         const childId = parseInt(text, 10);
         if (isNaN(childId) || childId <= 0) {
           await ctx.reply(
-            'Не похоже на Telegram ID 🤔\n\nВведи числовой ID, например: `6603463762`\n\n' +
-            '_Узнать через_ @userinfobot',
+            'Не похоже на Telegram ID 🤔\n\nВведи числовой ID, например: `6603463762`\n\n_Узнать через_ @userinfobot',
             { parse_mode: 'Markdown' }
           );
           return;
         }
-        state.childId = childId;
-        state.step = 'name';
-        pendingChildSetup.set(userId, state);
+        await setSessionKey(userId, 'childSetup', { step: 'name', childId });
         await ctx.reply('👶 *Шаг 2/2:* Как зовут ребёнка? (например: Макс)', { parse_mode: 'Markdown' });
         return;
       }
@@ -77,14 +73,11 @@ export function createBot() {
       if (state.step === 'name') {
         const childName = text;
         const childId = state.childId!;
-        pendingChildSetup.delete(userId);
-
+        await clearSessionKey(userId, 'childSetup');
         const { db } = await import('../db/firebase');
         await db.collection('config').doc('settings').update({ childId, childName });
-
         await ctx.reply(
-          `✅ *${childName} добавлен!*\n\nБот полностью готов к работе.\n` +
-          `Попроси ${childName} написать /start этому боту.`,
+          `✅ *${childName} добавлен!*\n\nБот полностью готов к работе.\nПопроси ${childName} написать /start этому боту.`,
           { parse_mode: 'Markdown', reply_markup: parentKeyboard }
         );
         await showParentMenu(ctx);
@@ -93,8 +86,8 @@ export function createBot() {
     }
 
     // Визард добавления ребёнка (после /addchild без аргументов)
-    if (pendingAddChild.has(userId)) {
-      const state = pendingAddChild.get(userId)!;
+    if (session.addChild) {
+      const state = session.addChild;
       const text = ctx.message.text.trim();
 
       if (state.step === 'id') {
@@ -103,9 +96,7 @@ export function createBot() {
           await ctx.reply('Введи числовой Telegram ID, например: `6603463762`', { parse_mode: 'Markdown' });
           return;
         }
-        state.childId = childId;
-        state.step = 'name';
-        pendingAddChild.set(userId, state);
+        await setSessionKey(userId, 'addChild', { step: 'name', childId });
         await ctx.reply('👶 Как зовут ребёнка?');
         return;
       }
@@ -113,11 +104,9 @@ export function createBot() {
       if (state.step === 'name') {
         const childName = text;
         const childId = state.childId!;
-        pendingAddChild.delete(userId);
-
+        await clearSessionKey(userId, 'addChild');
         const { db } = await import('../db/firebase');
         await db.collection('config').doc('settings').update({ childId, childName });
-
         await ctx.reply(`✅ *${childName} добавлен!* ID: ${childId}`, { parse_mode: 'Markdown' });
         return;
       }
@@ -196,11 +185,9 @@ export function createBot() {
       }
     }
 
-    pendingAddChild.set(userId, { step: 'id' });
+    await setSessionKey(userId, 'addChild', { step: 'id' });
     await ctx.reply(
-      `👶 *Добавление ребёнка*\n\n` +
-      `*Шаг 1/2:* Введи Telegram ID ребёнка\n` +
-      `_Узнать через_ @userinfobot`,
+      `👶 *Добавление ребёнка*\n\n*Шаг 1/2:* Введи Telegram ID ребёнка\n_Узнать через_ @userinfobot`,
       { parse_mode: 'Markdown' }
     );
   });
@@ -251,7 +238,7 @@ export function createBot() {
   bot.callbackQuery('settings:change_child', async (ctx) => {
     await ctx.answerCallbackQuery();
     const userId = ctx.from.id;
-    pendingAddChild.set(userId, { step: 'id' });
+    await setSessionKey(userId, 'addChild', { step: 'id' });
     await ctx.reply(
       '👶 Введи новый Telegram ID ребёнка\n_Узнать через_ @userinfobot',
       { parse_mode: 'Markdown' }

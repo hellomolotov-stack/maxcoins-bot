@@ -1,13 +1,12 @@
 import { Bot, Context, InlineKeyboard } from 'grammy';
 import { createWish, getWishes, getWish, updateWishStatus } from '../../db/wishes';
 import { spendMaxcoins, getBalance, getSettings } from '../../db/balance';
+import { getSession, setSessionKey, clearSessionKey } from '../../db/session';
 import { Settings } from '../../types';
-import { childKeyboard, parentKeyboard } from './menus';
+import { childKeyboard } from './menus';
 
-const pendingWishProposal = new Map<number, Partial<{ title: string; cost: number }>>();
-
-export function startWishProposal(userId: number) {
-  pendingWishProposal.set(userId, {});
+export function startWishProposal(userId: number): Promise<void> {
+  return setSessionKey(userId, 'wishDraft', {});
 }
 
 export async function showWishesForChild(ctx: Context) {
@@ -75,9 +74,7 @@ export function registerWishHandlers(bot: Bot) {
 
     const balance = await getBalance();
     if (balance.maxcoins < wish.cost) {
-      await ctx.reply(
-        `Не хватает монеток 😔\nНужно ${wish.cost}, у тебя ${balance.maxcoins}.\n\nПродолжай выполнять задания!`
-      );
+      await ctx.reply(`Не хватает монеток 😔\nНужно ${wish.cost}, у тебя ${balance.maxcoins}.\nПродолжай выполнять задания!`);
       return;
     }
 
@@ -86,8 +83,7 @@ export function registerWishHandlers(bot: Bot) {
 
     await ctx.reply(
       `🎁 Ты активировал хотелку *${wish.title}*!\n\n` +
-      `Потрачено: ${wish.cost} 🪙\nОсталось: ${newBalance.maxcoins} 🪙\n\n` +
-      `Родители скоро исполнят! 🎉`,
+      `Потрачено: ${wish.cost} 🪙\nОсталось: ${newBalance.maxcoins} 🪙\n\nРодители скоро исполнят! 🎉`,
       { parse_mode: 'Markdown', reply_markup: childKeyboard }
     );
 
@@ -104,49 +100,48 @@ export function registerWishHandlers(bot: Bot) {
 
   bot.callbackQuery('wishes:propose', async (ctx) => {
     await ctx.answerCallbackQuery();
-    pendingWishProposal.set(ctx.from.id, {});
+    await setSessionKey(ctx.from.id, 'wishDraft', {});
     await ctx.reply('✨ *Новая хотелка*\n\nШаг 1/2: Что ты хочешь? Напиши название:', { parse_mode: 'Markdown' });
   });
 
   bot.on('message:text', async (ctx, next) => {
     const userId = ctx.from?.id;
-    if (!userId || !pendingWishProposal.has(userId)) return next();
+    if (!userId) return next();
 
-    const draft = pendingWishProposal.get(userId)!;
+    const session = await getSession(userId);
+    if (session.wishDraft === undefined) return next();
+
+    const draft = session.wishDraft;
     const text = ctx.message.text;
 
     if (!draft.title) {
-      draft.title = text;
-      pendingWishProposal.set(userId, draft);
+      await setSessionKey(userId, 'wishDraft', { title: text });
       await ctx.reply('💰 Шаг 2/2: Сколько Макскоинов должна стоить эта хотелка?');
       return;
     }
 
-    if (draft.cost === undefined) {
-      const cost = parseInt(text, 10);
-      if (isNaN(cost) || cost <= 0) { await ctx.reply('Напиши целое число, например: 50'); return; }
-      pendingWishProposal.delete(userId);
+    const cost = parseInt(text, 10);
+    if (isNaN(cost) || cost <= 0) { await ctx.reply('Напиши целое число, например: 50'); return; }
 
-      const wish = await createWish({ title: draft.title, cost, proposedBy: userId, status: 'pending' });
+    await clearSessionKey(userId, 'wishDraft');
+    const wish = await createWish({ title: draft.title, cost, proposedBy: userId, status: 'pending' });
 
-      await ctx.reply(
-        `✅ Предложение отправлено родителям!\n\n✨ ${wish.title}\n💰 ${wish.cost} Макскоинов\n\nЖди ответа 🙏`,
-        { reply_markup: childKeyboard }
+    await ctx.reply(
+      `✅ Предложение отправлено родителям!\n\n✨ ${wish.title}\n💰 ${wish.cost} Макскоинов\n\nЖди ответа 🙏`,
+      { reply_markup: childKeyboard }
+    );
+
+    const settings = await getSettings() as Settings;
+    const keyboard = new InlineKeyboard()
+      .text('✅ Одобрить', `admin:wishes:approve:${wish.id}`)
+      .text('❌ Отклонить', `admin:wishes:reject:${wish.id}`);
+
+    for (const parentId of settings.parentIds) {
+      await ctx.api.sendMessage(
+        parentId,
+        `💌 *${settings.childName} предложил хотелку!*\n\n✨ ${wish.title}\n💰 Цена: ${wish.cost} Макскоинов`,
+        { parse_mode: 'Markdown', reply_markup: keyboard }
       );
-
-      const settings = await getSettings() as Settings;
-      const keyboard = new InlineKeyboard()
-        .text('✅ Одобрить', `admin:wishes:approve:${wish.id}`)
-        .text('❌ Отклонить', `admin:wishes:reject:${wish.id}`);
-
-      for (const parentId of settings.parentIds) {
-        await ctx.api.sendMessage(
-          parentId,
-          `💌 *${settings.childName} предложил хотелку!*\n\n✨ ${wish.title}\n💰 Цена: ${wish.cost} Макскоинов`,
-          { parse_mode: 'Markdown', reply_markup: keyboard }
-        );
-      }
-      return;
     }
   });
 
@@ -161,10 +156,7 @@ export function registerWishHandlers(bot: Bot) {
     if (!wish) { await ctx.reply('Не найдено'); return; }
 
     await updateWishStatus(wish.id, 'approved');
-    await ctx.editMessageText(
-      `✅ Одобрена: *${wish.title}* (${wish.cost} 🪙)`,
-      { parse_mode: 'Markdown' }
-    );
+    await ctx.editMessageText(`✅ Одобрена: *${wish.title}* (${wish.cost} 🪙)`, { parse_mode: 'Markdown' });
 
     const settings = await getSettings() as Settings;
     await ctx.api.sendMessage(
