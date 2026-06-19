@@ -44,9 +44,16 @@ export interface Balance {
   lastDriftAt: FirebaseFirestore.Timestamp;
 }
 
+export interface ParentInfo {
+  id: number;
+  name: string;
+  role: 'Мама' | 'Папа' | '';
+}
+
 export interface Settings {
-  dailyDrift: number;    // сколько очков в день дрейфует к ребёнку
+  dailyDrift: number;
   parentIds: number[];
+  parents: ParentInfo[];
   childId: number;
   childName: string;
 }

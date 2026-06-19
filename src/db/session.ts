@@ -8,6 +8,11 @@ type SessionData = {
   pendingReject?: string;
   childSetup?: { step: 'id' | 'name'; childId?: number };
   addChild?: { step: 'id' | 'name'; childId?: number };
+  violation?: { step: 'description' | 'coins'; text?: string; photoFileId?: string };
+  parentSetup?: { step: 'name' | 'role'; name?: string };
+  joinFamily?: { step: 'name' | 'role'; name?: string };
+  addParentWizard?: { step: 'id' | 'name' | 'role'; parentId?: number; name?: string };
+  talkLimits?: Record<string, { count: number; date: string }>;
 };
 
 export type TaskDraft = {

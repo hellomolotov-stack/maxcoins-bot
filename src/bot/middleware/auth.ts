@@ -1,4 +1,4 @@
-import { Context, NextFunction } from 'grammy';
+import { Context, NextFunction, InlineKeyboard } from 'grammy';
 import { getSettings } from '../../db/balance';
 
 export async function authMiddleware(ctx: Context, next: NextFunction) {
@@ -21,7 +21,24 @@ export async function authMiddleware(ctx: Context, next: NextFunction) {
   const isChild = userId === settings.childId;
 
   if (!isParent && !isChild) {
-    await ctx.reply('Тебя нет в списке пользователей. Попроси родителей добавить тебя.');
+    const knownParents = (settings.parents ?? []).filter(p => p.name || p.role);
+    const parentsText = knownParents.length > 0
+      ? knownParents.map(p => {
+          const emoji = p.role === 'Мама' ? '🩷' : p.role === 'Папа' ? '💙' : '👤';
+          return `${emoji} ${p.name || p.role}`;
+        }).join(', ')
+      : `${settings.parentIds.length} родит.`;
+
+    const keyboard = new InlineKeyboard()
+      .text('✅ Присоединиться как родитель', 'family:join');
+
+    await ctx.reply(
+      `👨‍👩‍👦 *Семья ${settings.childName}*\n\n` +
+      `👶 Ребёнок: *${settings.childName}*\n` +
+      `👤 Родители: ${parentsText}\n\n` +
+      `Если ты родитель этой семьи — нажми кнопку ниже.`,
+      { parse_mode: 'Markdown', reply_markup: keyboard }
+    );
     return;
   }
 

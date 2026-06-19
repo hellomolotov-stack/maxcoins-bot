@@ -22,7 +22,12 @@ export async function getBalance(): Promise<Balance> {
 export async function getSettings(): Promise<Settings> {
   const snap = await settingsRef().get();
   if (!snap.exists) return null as any;
-  return snap.data() as Settings;
+  const data = snap.data() as Settings;
+  // Нормализуем: если parents не заполнен — строим из parentIds
+  if (!data.parents || data.parents.length === 0) {
+    data.parents = (data.parentIds ?? []).map(id => ({ id, name: '', role: '' as '' }));
+  }
+  return data;
 }
 
 export async function addMaxcoins(amount: number): Promise<Balance> {

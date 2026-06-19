@@ -85,12 +85,12 @@ export function registerTaskHandlers(bot: Bot) {
     await ctx.reply('📸 Пришли фото выполнения — я отправлю его родителям на проверку.');
   });
 
-  bot.on('message:photo', async (ctx) => {
+  bot.on('message:photo', async (ctx, next) => {
     const userId = ctx.from?.id;
-    if (!userId) return;
+    if (!userId) return next();
     const session = await getSession(userId);
     const taskId = session.pendingPhoto;
-    if (!taskId) return;
+    if (!taskId) return next();
 
     await clearSessionKey(userId, 'pendingPhoto');
     const task = await getTask(taskId);

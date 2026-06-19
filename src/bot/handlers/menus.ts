@@ -12,7 +12,8 @@ export const childKeyboard = new Keyboard()
 export const parentKeyboard = new Keyboard()
   .text('📊 Статус').text('📋 Задания').row()
   .text('✅ На проверке').text('🌟 Хотелки').row()
-  .text('➕ Добавить задание').text('‼️ Отвлечение ‼️')
+  .text('➕ Добавить задание').text('‼️ Отвлечение ‼️').row()
+  .text('⚠️ Нарушение')
   .resized().persistent();
 
 export async function showChildMenu(ctx: Context) {
