@@ -23,6 +23,18 @@ export function createBot() {
     const userId = ctx.from?.id;
     if (!userId) return;
 
+    // Защита от повторного запуска — если семья уже настроена
+    const existing = await db.collection('config').doc('settings').get();
+    if (existing.exists && (existing.data()?.parentIds?.length ?? 0) > 0) {
+      await ctx.reply(
+        '⚠️ *Бот уже настроен!*\n\n' +
+        'Для управления семьёй нажми /menu → ⚙️ Настройки → 👨‍👩‍👦 Управление родителями.\n\n' +
+        '_Повторный /setup сбросит всю семью. Если это нужно — сначала напиши администратору бота._',
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
     await db.collection('config').doc('settings').set({
       parentIds: [userId],
       parents: [],
@@ -120,11 +132,13 @@ export function createBot() {
     }
     await db.collection('config').doc('settings').update({ parents });
 
+    // Спрашиваем название семьи
+    await setSessionKey(userId, 'familyNameInput', true);
     await ctx.reply(
-      `✅ *Отлично, ${name}!* Роль: *${role}*\n\nБот полностью настроен! Попроси ребёнка написать /start.`,
+      `✅ *Отлично, ${name}!* Роль: *${role}*\n\n` +
+      `Последний шаг: как называется ваша семья?\n_(например: Ивановы, Семья Максима)_`,
       { parse_mode: 'Markdown' }
     );
-    await showParentMenu(ctx);
   });
 
   // ── Pre-auth: текстовые визарды ──────────────────────────────────────
@@ -132,6 +146,23 @@ export function createBot() {
     const userId = ctx.from?.id;
     if (!userId) return next();
     const session = await getSession(userId);
+
+    // Если активен post-auth визард — не перехватываем здесь
+    if (session.addParentWizard || session.violation) return next();
+
+    // Название семьи (последний шаг /setup или изменение из настроек)
+    if (session.familyNameInput) {
+      const name = ctx.message.text.trim();
+      await clearSessionKey(userId, 'familyNameInput');
+      const { db } = await import('../db/firebase');
+      await db.collection('config').doc('settings').update({ familyName: name });
+      await ctx.reply(
+        `✅ Семья названа *«${name}»*!\n\nТеперь всё готово. Попроси ребёнка написать /start.`,
+        { parse_mode: 'Markdown', reply_markup: parentKeyboard }
+      );
+      await showParentMenu(ctx);
+      return;
+    }
 
     // Визард: childSetup (после /setup)
     if (session.childSetup) {
@@ -377,11 +408,23 @@ export function createBot() {
 
   bot.callbackQuery('settings:add_parent', async (ctx) => {
     await ctx.answerCallbackQuery();
-    await setSessionKey(ctx.from.id, 'addParentWizard', { step: 'id' });
+    const userId = ctx.from.id;
+    // Сбрасываем устаревшие pre-auth сессии, чтобы избежать конфликта
+    await clearSessionKey(userId, 'childSetup');
+    await clearSessionKey(userId, 'addChild');
+    await clearSessionKey(userId, 'familyNameInput');
+    await setSessionKey(userId, 'addParentWizard', { step: 'id' });
     await ctx.reply(
       '👤 *Добавление родителя*\n\nШаг 1/3: Введи Telegram ID нового родителя\n_Узнать через_ @userinfobot',
       { parse_mode: 'Markdown' }
     );
+  });
+
+  bot.callbackQuery('settings:family_name', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await clearSessionKey(ctx.from.id, 'addParentWizard');
+    await setSessionKey(ctx.from.id, 'familyNameInput', true);
+    await ctx.reply('📝 Как называется ваша семья? (например: Ивановы)');
   });
 
   bot.callbackQuery(/^settings:newparent:(\d+):(Мама|Папа)$/, async (ctx) => {
@@ -560,23 +603,32 @@ export function createBot() {
     await ctx.answerCallbackQuery();
     const settings = await getSettings();
 
-    const knownParents = settings.parents?.filter(p => p.name || p.role);
-    const parentsText = knownParents?.length > 0
-      ? knownParents.map(p => {
-          const emoji = p.role === 'Мама' ? '🩷' : p.role === 'Папа' ? '💙' : '👤';
-          return `${emoji} *${p.name}* (${p.role || 'роль не задана'})`;
-        }).join('\n')
-      : `${settings.parentIds.length} родит. (роли не заданы)`;
+    const familyHeader = settings.familyName
+      ? `🏠 *Семья «${settings.familyName}»*`
+      : `🏠 *Семья* _(название не задано)_`;
+
+    const members: string[] = [];
+    members.push(`👶 ${settings.childName} — ребёнок`);
+
+    const parents = settings.parents?.length > 0
+      ? settings.parents
+      : settings.parentIds.map(id => ({ id, name: `ID: ${id}`, role: '' as '' }));
+
+    for (const p of parents) {
+      const emoji = p.role === 'Мама' ? '🩷' : p.role === 'Папа' ? '💙' : '👤';
+      const roleStr = p.role || 'роль не задана';
+      members.push(`${emoji} ${p.name || `ID: ${p.id}`} — ${roleStr}`);
+    }
 
     const keyboard = new InlineKeyboard()
+      .text('📝 Название семьи', 'settings:family_name').row()
       .text('👶 Сменить ребёнка', 'settings:change_child').row()
       .text('👨‍👩‍👦 Управление родителями', 'settings:parents').row()
       .text('🏠 В меню', 'main:parent');
 
     await ctx.reply(
-      `⚙️ *Настройки*\n\n` +
-      `👶 Ребёнок: *${settings.childName}*\n\n` +
-      `👨‍👩‍👦 Родители:\n${parentsText}\n\n` +
+      `${familyHeader}\n\n` +
+      `👨‍👩‍👦 *Состав семьи:*\n${members.join('\n')}\n\n` +
       `📉 Дрейф: ${settings.dailyDrift} очков/день`,
       { parse_mode: 'Markdown', reply_markup: keyboard }
     );

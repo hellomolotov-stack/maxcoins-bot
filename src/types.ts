@@ -56,4 +56,5 @@ export interface Settings {
   parents: ParentInfo[];
   childId: number;
   childName: string;
+  familyName?: string;
 }

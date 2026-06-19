@@ -13,6 +13,7 @@ type SessionData = {
   joinFamily?: { step: 'name' | 'role'; name?: string };
   addParentWizard?: { step: 'id' | 'name' | 'role'; parentId?: number; name?: string };
   talkLimits?: Record<string, { count: number; date: string }>;
+  familyNameInput?: boolean;
 };
 
 export type TaskDraft = {

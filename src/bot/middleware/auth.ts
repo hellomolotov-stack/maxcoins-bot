@@ -32,8 +32,12 @@ export async function authMiddleware(ctx: Context, next: NextFunction) {
     const keyboard = new InlineKeyboard()
       .text('✅ Присоединиться как родитель', 'family:join');
 
+    const familyLabel = settings.familyName
+      ? `Семья «${settings.familyName}»`
+      : `Семья ${settings.childName}`;
+
     await ctx.reply(
-      `👨‍👩‍👦 *Семья ${settings.childName}*\n\n` +
+      `👨‍👩‍👦 *${familyLabel}*\n\n` +
       `👶 Ребёнок: *${settings.childName}*\n` +
       `👤 Родители: ${parentsText}\n\n` +
       `Если ты родитель этой семьи — нажми кнопку ниже.`,
