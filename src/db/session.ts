@@ -14,6 +14,10 @@ type SessionData = {
   addParentWizard?: { step: 'id' | 'name' | 'role'; parentId?: number; name?: string };
   talkLimits?: Record<string, { count: number; date: string }>;
   familyNameInput?: boolean;
+  taskProposal?: { step: 'title' | 'desc'; title?: string };
+  featureRequest?: boolean;
+  proposalReward?: { proposalId: string; title: string };
+  setDrift?: boolean;
 };
 
 export type TaskDraft = {

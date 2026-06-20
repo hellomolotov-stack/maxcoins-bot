@@ -148,7 +148,7 @@ export function createBot() {
     const session = await getSession(userId);
 
     // Если активен post-auth визард — не перехватываем здесь
-    if (session.addParentWizard || session.violation) return next();
+    if (session.addParentWizard || session.violation || session.taskProposal || session.featureRequest || session.proposalReward) return next();
 
     // Название семьи (последний шаг /setup или изменение из настроек)
     if (session.familyNameInput) {
@@ -503,6 +503,22 @@ export function createBot() {
         await ctx.reply('К кому хочешь обратиться?', { reply_markup: keyboard });
         return;
       }
+      if (text === '💡 Предложить задание') {
+        await setSessionKey(ctx.from.id, 'taskProposal', { step: 'title' });
+        await ctx.reply(
+          '💡 *Предложить задание*\n\nШаг 1/2: Как называется задание?\n_(например: «Убрать комнату»)_',
+          { parse_mode: 'Markdown' }
+        );
+        return;
+      }
+      if (text === '💌 Предложить функцию') {
+        await setSessionKey(ctx.from.id, 'featureRequest', true);
+        await ctx.reply(
+          '💌 *Предложить идею*\n\nЧто ты хочешь добавить в бот? Напиши одним сообщением:',
+          { parse_mode: 'Markdown' }
+        );
+        return;
+      }
     }
 
     if (role === 'parent') {
@@ -540,6 +556,60 @@ export function createBot() {
         await ctx.reply(
           '⚠️ *Нарушение*\n\nОпиши, что произошло.\n_Можно прислать текст, фото или фото с подписью._',
           { parse_mode: 'Markdown' }
+        );
+        return;
+      }
+      if (text === '⚙️ Кабинет') {
+        await ctx.api.sendMessage(ctx.from.id, '⏳ Загружаю кабинет...').catch(() => {});
+        const settings = await getSettings();
+        const balance = await import('../db/balance').then(m => m.getBalance());
+        const { getActiveTasks } = await import('../db/tasks');
+        const { getPendingSubmissions } = await import('../db/tasks');
+        const { getPendingTaskProposals } = await import('../db/proposals');
+        const { getFeatureRequests } = await import('../db/proposals');
+        const { getWishes } = await import('../db/wishes');
+
+        const [tasks, subs, proposals, feats, wishes] = await Promise.all([
+          getActiveTasks(),
+          getPendingSubmissions(),
+          getPendingTaskProposals(),
+          getFeatureRequests(),
+          getWishes('pending'),
+        ]);
+
+        const parents = settings.parents?.length > 0
+          ? settings.parents.map(p => {
+              const e = p.role === 'Мама' ? '🩷' : p.role === 'Папа' ? '💙' : '👤';
+              return `${e} ${p.name}`;
+            }).join(' + ')
+          : `${settings.parentIds.length} родит.`;
+
+        const familyLine = settings.familyName
+          ? `🏠 *${settings.familyName}*  •  👶 ${settings.childName}  •  ${parents}`
+          : `👶 ${settings.childName}  •  ${parents}`;
+
+        const sign = balance.value > 0 ? '+' : '';
+        const statsLines = [
+          `📋 Заданий активных: *${tasks.length}*`,
+          `✅ На проверке: *${subs.length}*`,
+          `🌟 Хотелок на согласование: *${wishes.length}*`,
+          `💡 Предложений заданий: *${proposals.length}*`,
+          `💌 Идей функций: *${feats.length}*`,
+          `⚖️ Баланс весов: *${sign}${balance.value}*  •  💰 *${balance.maxcoins}* монет`,
+          `📉 Дрейф: *${settings.dailyDrift}* очков/день`,
+        ].join('\n');
+
+        const keyboard = new InlineKeyboard()
+          .text('💡 Предложения задания', 'admin:proposals').row()
+          .text('💌 Идеи функций', 'admin:feats').row()
+          .text('👨‍👩‍👦 Состав семьи', 'admin:settings').row()
+          .text('📉 Изменить дрейф', 'admin:drift').row()
+          .text('💌 Предложить функцию', 'feat:start').row()
+          .text('🏠 В меню', 'main:parent');
+
+        await ctx.reply(
+          `⚙️ *КАБИНЕТ*\n\n${familyLine}\n\n${statsLines}`,
+          { parse_mode: 'Markdown', reply_markup: keyboard }
         );
         return;
       }
@@ -640,6 +710,129 @@ export function createBot() {
     await ctx.reply('👶 Введи новый Telegram ID ребёнка\n_Узнать через_ @userinfobot', { parse_mode: 'Markdown' });
   });
 
+  // ── Post-auth: admin cabinet callbacks ───────────────────────────────────
+  bot.callbackQuery('admin:proposals', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const { getPendingTaskProposals } = await import('../db/proposals');
+    const proposals = await getPendingTaskProposals();
+
+    if (!proposals.length) {
+      await ctx.reply('💡 Нет новых предложений заданий от ребёнка ✅');
+      return;
+    }
+
+    await ctx.reply(`💡 *Предложений заданий: ${proposals.length}*`, { parse_mode: 'Markdown' });
+    for (const p of proposals) {
+      const kb = new InlineKeyboard()
+        .text('✅ Принять', `prop:accept:${p.id}`)
+        .text('❌ Отклонить', `prop:reject:${p.id}`);
+      const text = p.description
+        ? `💡 *${p.title}*\n\n${p.description}`
+        : `💡 *${p.title}*`;
+      await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: kb });
+    }
+  });
+
+  bot.callbackQuery('admin:feats', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const { getFeatureRequests } = await import('../db/proposals');
+    const feats = await getFeatureRequests();
+
+    if (!feats.length) {
+      await ctx.reply('💌 Идей пока нет ✅');
+      return;
+    }
+
+    const text = feats.map((f, i) => `${i + 1}. *${f.fromName}:* ${f.text}`).join('\n\n');
+    await ctx.reply(`💌 *Идеи функций (${feats.length}):*\n\n${text}`, { parse_mode: 'Markdown' });
+  });
+
+  bot.callbackQuery('admin:drift', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const settings = await getSettings();
+    const d = settings.dailyDrift;
+    const kb = new InlineKeyboard()
+      .text('−10', `drift:set:${Math.max(0, d - 10)}`)
+      .text('−5', `drift:set:${Math.max(0, d - 5)}`)
+      .text(`сейчас: ${d}`, 'drift:noop')
+      .text('+5', `drift:set:${d + 5}`)
+      .text('+10', `drift:set:${d + 10}`);
+    await ctx.reply(
+      `📉 *Дрейф весов*\n\nКаждый день весы сами движутся к ребёнку на *${d}* очков.\nЭто мотивирует ребёнка выполнять задания для поддержания баланса.\n\nИзмени значение:`,
+      { parse_mode: 'Markdown', reply_markup: kb }
+    );
+  });
+
+  bot.callbackQuery('drift:noop', async (ctx) => {
+    await ctx.answerCallbackQuery('Это текущее значение');
+  });
+
+  bot.callbackQuery(/^drift:set:(\d+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery('Сохранено!');
+    const newDrift = parseInt(ctx.match[1], 10);
+    const { db } = await import('../db/firebase');
+    await db.collection('config').doc('settings').update({ dailyDrift: newDrift });
+    const kb = new InlineKeyboard()
+      .text('−10', `drift:set:${Math.max(0, newDrift - 10)}`)
+      .text('−5', `drift:set:${Math.max(0, newDrift - 5)}`)
+      .text(`сейчас: ${newDrift}`, 'drift:noop')
+      .text('+5', `drift:set:${newDrift + 5}`)
+      .text('+10', `drift:set:${newDrift + 10}`);
+    await ctx.editMessageText(
+      `📉 *Дрейф весов*\n\nКаждый день весы движутся к ребёнку на *${newDrift}* очков.\n\nИзмени значение:`,
+      { parse_mode: 'Markdown', reply_markup: kb }
+    );
+  });
+
+  bot.callbackQuery(/^prop:accept:(.+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery('Принято!');
+    const proposalId = ctx.match[1];
+    const { getTaskProposal, updateTaskProposalStatus } = await import('../db/proposals');
+    const proposal = await getTaskProposal(proposalId);
+    if (!proposal) { await ctx.reply('Предложение не найдено'); return; }
+
+    await updateTaskProposalStatus(proposalId, 'accepted');
+    await setSessionKey(ctx.from.id, 'proposalReward', { proposalId, title: proposal.title });
+    await ctx.editMessageText(
+      `✅ *${proposal.title}* — принято!\n\nУкажи награду (количество Макскоинов):`,
+      { parse_mode: 'Markdown', reply_markup: new InlineKeyboard() }
+    );
+  });
+
+  bot.callbackQuery(/^prop:reject:(.+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery('Отклонено');
+    const proposalId = ctx.match[1];
+    const { getTaskProposal, updateTaskProposalStatus } = await import('../db/proposals');
+    const proposal = await getTaskProposal(proposalId);
+    if (!proposal) { await ctx.reply('Предложение не найдено'); return; }
+
+    await updateTaskProposalStatus(proposalId, 'rejected');
+    await ctx.editMessageText(`❌ *${proposal.title}* — отклонено.`, { parse_mode: 'Markdown' });
+
+    const settings = await getSettings();
+    await ctx.api.sendMessage(
+      proposal.childId,
+      `😔 Родители пока не приняли твоё предложение задания: *${proposal.title}*\n\nПопробуй предложить что-то другое!`,
+      { parse_mode: 'Markdown' }
+    ).catch(() => {});
+  });
+
+  bot.callbackQuery('feat:start', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await setSessionKey(ctx.from.id, 'featureRequest', true);
+    await ctx.reply('💌 Напиши свою идею для бота — что хочешь добавить или улучшить?');
+  });
+
+  bot.callbackQuery('proposal:skip_desc', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const userId = ctx.from.id;
+    const session = await getSession(userId);
+    const title = session.taskProposal?.title;
+    if (!title) { await ctx.reply('Что-то пошло не так. Нажми «💡 Предложить задание» заново.'); return; }
+    await clearSessionKey(userId, 'taskProposal');
+    await submitTaskProposal(ctx, userId, title, '');
+  });
+
   // ── Post-auth: нарушение — текст ─────────────────────────────────────
   bot.on('message:text', async (ctx, next) => {
     const userId = ctx.from?.id;
@@ -650,6 +843,94 @@ export function createBot() {
       session = await getSession(userId);
     } catch (e: any) {
       await ctx.reply(`⚠️ Ошибка сессии: ${e?.message}`);
+      return;
+    }
+
+    // Награда за принятое предложение задания
+    if (session.proposalReward) {
+      const reward = parseInt(ctx.message.text.trim(), 10);
+      if (isNaN(reward) || reward <= 0) {
+        await ctx.reply('Введи целое число больше 0, например: 20');
+        return;
+      }
+      const { proposalId, title } = session.proposalReward;
+      await clearSessionKey(userId, 'proposalReward');
+
+      const { getTaskProposal } = await import('../db/proposals');
+      const { createTask } = await import('../db/tasks');
+      const proposal = await getTaskProposal(proposalId);
+      const settings = await getSettings();
+
+      await createTask({
+        title,
+        description: proposal?.description ?? '',
+        reward,
+        type: 'once',
+        active: true,
+      });
+
+      await ctx.reply(`✅ Задание *${title}* добавлено! Награда: ${reward} Макскоинов.`, { parse_mode: 'Markdown' });
+
+      if (proposal?.childId) {
+        await ctx.api.sendAnimation(
+          proposal.childId,
+          GIF.NEW_TASK,
+          {
+            caption: `🎉 Твоё предложение задания принято!\n\n📌 *${title}*\n💰 Награда: ${reward} Макскоинов`,
+            parse_mode: 'Markdown',
+          }
+        ).catch(() => {});
+      }
+      return;
+    }
+
+    // Предложение задания от ребёнка
+    if (session.taskProposal) {
+      const state = session.taskProposal;
+      const text = ctx.message.text.trim();
+
+      if (state.step === 'title') {
+        await setSessionKey(userId, 'taskProposal', { step: 'desc', title: text });
+        const kb = new InlineKeyboard().text('⏭ Пропустить описание', 'proposal:skip_desc');
+        await ctx.reply(
+          `💡 *${text}*\n\nШаг 2/2: Добавь описание (или нажми «Пропустить»):`,
+          { parse_mode: 'Markdown', reply_markup: kb }
+        );
+        return;
+      }
+
+      if (state.step === 'desc') {
+        const description = text;
+        const title = state.title!;
+        await clearSessionKey(userId, 'taskProposal');
+        await submitTaskProposal(ctx, userId, title, description);
+        return;
+      }
+    }
+
+    // Идея функции
+    if (session.featureRequest) {
+      await clearSessionKey(userId, 'featureRequest');
+      const { createFeatureRequest } = await import('../db/proposals');
+      const settings = await getSettings();
+      const fromName = ctx.from.first_name ?? 'Пользователь';
+      await createFeatureRequest({ text: ctx.message.text, from: userId, fromName });
+
+      await ctx.reply(
+        '💌 Спасибо! Идея отправлена. Родители смогут её увидеть в ⚙️ Кабинете.',
+        { reply_markup: (ctx as any).userRole === 'child' ? childKeyboard : parentKeyboard }
+      );
+
+      // Notify parents
+      for (const pid of settings.parentIds) {
+        if (pid !== userId) {
+          await ctx.api.sendMessage(
+            pid,
+            `💌 *${fromName}* предложил идею для бота:\n\n${ctx.message.text}`,
+            { parse_mode: 'Markdown' }
+          ).catch(() => {});
+        }
+      }
       return;
     }
 
@@ -716,6 +997,29 @@ export function createBot() {
       .text('−30', 'viol:30').text('−50', 'viol:50').text('−100', 'viol:100');
     await ctx.reply('Сколько Макскоинов списать?', { reply_markup: kb });
   });
+
+  const submitTaskProposal = async (ctx: any, childId: number, title: string, description: string) => {
+    const { createTaskProposal } = await import('../db/proposals');
+    const settings = await getSettings();
+    const proposal = await createTaskProposal({ title, description, childId, status: 'pending' });
+
+    await ctx.reply(
+      `✅ Предложение отправлено!\n\n💡 *${title}*\n\nЖди ответа от родителей.`,
+      { parse_mode: 'Markdown', reply_markup: childKeyboard }
+    );
+
+    const kb = new InlineKeyboard()
+      .text('✅ Принять', `prop:accept:${proposal.id}`)
+      .text('❌ Отклонить', `prop:reject:${proposal.id}`);
+
+    const msgText = description
+      ? `💡 *${settings.childName} предлагает задание:*\n\n*${title}*\n${description}`
+      : `💡 *${settings.childName} предлагает задание:*\n\n*${title}*`;
+
+    for (const pid of settings.parentIds) {
+      await ctx.api.sendMessage(pid, msgText, { parse_mode: 'Markdown', reply_markup: kb }).catch(() => {});
+    }
+  };
 
   registerTaskHandlers(bot);
   registerWishHandlers(bot);

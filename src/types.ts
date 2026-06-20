@@ -58,3 +58,20 @@ export interface Settings {
   childName: string;
   familyName?: string;
 }
+
+export interface TaskProposal {
+  id: string;
+  title: string;
+  description: string;
+  childId: number;
+  status: 'pending' | 'accepted' | 'rejected';
+  createdAt: FirebaseFirestore.Timestamp;
+}
+
+export interface FeatureRequest {
+  id: string;
+  text: string;
+  from: number;
+  fromName: string;
+  createdAt: FirebaseFirestore.Timestamp;
+}

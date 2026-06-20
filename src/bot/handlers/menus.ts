@@ -6,14 +6,15 @@ import { generateScalesImage } from '../../scales/image';
 export const childKeyboard = new Keyboard()
   .text('⚖️ Весы').text('📋 Задания').row()
   .text('🌟 Хотелки').text('➕ Предложить хотелку').row()
-  .text('🙏🏻 Важно поговорить')
+  .text('💡 Предложить задание').text('🙏🏻 Важно поговорить').row()
+  .text('💌 Предложить функцию')
   .resized().persistent();
 
 export const parentKeyboard = new Keyboard()
   .text('📊 Статус').text('📋 Задания').row()
   .text('✅ На проверке').text('🌟 Хотелки').row()
   .text('➕ Добавить задание').text('‼️ Отвлечение ‼️').row()
-  .text('⚠️ Нарушение')
+  .text('⚠️ Нарушение').text('⚙️ Кабинет')
   .resized().persistent();
 
 export async function showChildMenu(ctx: Context) {

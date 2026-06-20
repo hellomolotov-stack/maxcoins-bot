@@ -1,111 +1,152 @@
 import { createCanvas } from '@napi-rs/canvas';
 
 export function generateScalesImage(balanceValue: number, childName: string = 'Ребёнок'): Buffer {
-  const canvas = createCanvas(600, 340);
+  const canvas = createCanvas(600, 360);
   const ctx = canvas.getContext('2d');
 
-  // фон
-  ctx.fillStyle = '#FAFAF8';
-  ctx.fillRect(0, 0, 600, 340);
+  // Background gradient
+  const grad = ctx.createLinearGradient(0, 0, 0, 360);
+  grad.addColorStop(0, '#F8F7FF');
+  grad.addColorStop(1, '#FFF8F0');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 600, 360);
 
   const cx = 300;
-  const poleTop = 40;
-  const poleBottom = 160;
+  const poleTop = 35;
+  const poleBottom = 155;
 
-  // угол наклона: ограничиваем ±30°
   const clamped = Math.max(-100, Math.min(100, balanceValue));
-  const angleDeg = (clamped / 100) * 28;
+  const angleDeg = (clamped / 100) * 32;  // up to 32° tilt
   const angleRad = (angleDeg * Math.PI) / 180;
 
-  const armLen = 180;
+  const armLen = 185;
   const lx = cx - Math.cos(angleRad) * armLen;
   const ly = poleBottom + Math.sin(angleRad) * armLen;
   const rx = cx + Math.cos(angleRad) * armLen;
   const ry = poleBottom - Math.sin(angleRad) * armLen;
 
-  // стойка
-  ctx.strokeStyle = '#888780';
-  ctx.lineWidth = 4;
+  // Pole shadow
+  ctx.shadowColor = 'rgba(0,0,0,0.15)';
+  ctx.shadowBlur = 6;
+  ctx.shadowOffsetY = 3;
+
+  // Pole
+  ctx.strokeStyle = '#7C7B78';
+  ctx.lineWidth = 5;
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(cx, poleTop);
-  ctx.lineTo(cx, poleBottom + 10);
+  ctx.lineTo(cx, poleBottom + 12);
   ctx.stroke();
 
-  // перекладина
-  ctx.strokeStyle = '#5F5E5A';
-  ctx.lineWidth = 5;
+  // Arm
+  ctx.strokeStyle = '#4E4D4A';
+  ctx.lineWidth = 6;
   ctx.beginPath();
   ctx.moveTo(lx, ly);
   ctx.lineTo(rx, ry);
   ctx.stroke();
 
-  // шарнир
-  ctx.fillStyle = '#5F5E5A';
+  // Pivot
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#4E4D4A';
   ctx.beginPath();
-  ctx.arc(cx, poleBottom, 8, 0, Math.PI * 2);
+  ctx.arc(cx, poleBottom, 10, 0, Math.PI * 2);
   ctx.fill();
 
-  const chainLen = 60;
+  const chainLen = 58;
 
-  // левая чаша (родители)
+  // Left chain (parents)
   const lPlatY = ly + chainLen;
-  ctx.strokeStyle = '#888780';
+  ctx.strokeStyle = '#9997C4';
   ctx.lineWidth = 2;
+  ctx.setLineDash([4, 3]);
   ctx.beginPath();
   ctx.moveTo(lx, ly);
   ctx.lineTo(lx, lPlatY);
   ctx.stroke();
+  ctx.setLineDash([]);
 
-  ctx.fillStyle = '#AFA9EC';
-  ctx.strokeStyle = '#534AB7';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.ellipse(lx, lPlatY + 10, 68, 14, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-
-  // правая чаша (ребёнок)
+  // Right chain (child)
   const rPlatY = ry + chainLen;
-  ctx.strokeStyle = '#888780';
+  ctx.strokeStyle = '#E8B86D';
   ctx.lineWidth = 2;
+  ctx.setLineDash([4, 3]);
   ctx.beginPath();
   ctx.moveTo(rx, ry);
   ctx.lineTo(rx, rPlatY);
   ctx.stroke();
+  ctx.setLineDash([]);
 
-  ctx.fillStyle = '#FAC775';
-  ctx.strokeStyle = '#BA7517';
-  ctx.lineWidth = 3;
+  // Determine winner for highlight
+  const parentWins = clamped < -10;
+  const childWins = clamped > 10;
+
+  // Left pan (parents)
+  ctx.shadowColor = parentWins ? 'rgba(83,74,183,0.4)' : 'rgba(0,0,0,0.1)';
+  ctx.shadowBlur = parentWins ? 14 : 6;
+  ctx.shadowOffsetY = 3;
+  ctx.fillStyle = parentWins ? '#B8B0FF' : '#AFA9EC';
+  ctx.strokeStyle = parentWins ? '#3D2FBB' : '#534AB7';
+  ctx.lineWidth = parentWins ? 4 : 2.5;
   ctx.beginPath();
-  ctx.ellipse(rx, rPlatY + 10, 68, 14, 0, 0, Math.PI * 2);
+  ctx.ellipse(lx, lPlatY + 10, 72, 15, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
 
-  // подписи под чашами
-  ctx.fillStyle = '#3C3489';
-  ctx.font = 'bold 18px sans-serif';
+  // Right pan (child)
+  ctx.shadowColor = childWins ? 'rgba(186,117,23,0.4)' : 'rgba(0,0,0,0.1)';
+  ctx.shadowBlur = childWins ? 14 : 6;
+  ctx.fillStyle = childWins ? '#FFD98A' : '#FAC775';
+  ctx.strokeStyle = childWins ? '#9B5B00' : '#BA7517';
+  ctx.lineWidth = childWins ? 4 : 2.5;
+  ctx.beginPath();
+  ctx.ellipse(rx, rPlatY + 10, 72, 15, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
+
+  // Labels under pans
+  ctx.font = `bold 17px sans-serif`;
   ctx.textAlign = 'center';
+
+  ctx.fillStyle = parentWins ? '#2A1FA0' : '#3C3489';
   ctx.fillText('Родители', lx, lPlatY + 44);
 
-  ctx.fillStyle = '#854F0B';
-  ctx.font = 'bold 18px sans-serif';
+  ctx.fillStyle = childWins ? '#7A3C00' : '#854F0B';
   ctx.fillText(childName, rx, rPlatY + 44);
 
-  // статус
-  ctx.fillStyle = '#2C2C2A';
-  ctx.font = '16px sans-serif';
-  ctx.textAlign = 'center';
-  let statusText = '';
-  if (clamped > 20) statusText = `⚡ Весы на стороне ${childName}!`;
-  else if (clamped < -20) statusText = '⚡ Весы на стороне родителей';
-  else statusText = '⚖ Весы почти ровные';
-  ctx.fillText(statusText, cx, 310);
+  // Winner badge
+  if (parentWins || childWins) {
+    const badgeX = parentWins ? lx : rx;
+    const badgeY = parentWins ? lPlatY - 20 : rPlatY - 20;
+    ctx.fillStyle = parentWins ? '#3D2FBB' : '#9B5B00';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.fillText('▼ тяжелее', badgeX, badgeY);
+  }
 
-  // значение
+  // Status bar at bottom
+  ctx.fillStyle = 'rgba(0,0,0,0.06)';
+  ctx.fillRect(0, 305, 600, 55);
+
+  ctx.fillStyle = '#2C2C2A';
+  ctx.font = 'bold 15px sans-serif';
+  ctx.textAlign = 'center';
+
+  let statusText = '';
+  if (Math.abs(clamped) <= 5) statusText = '⚖ Равновесие';
+  else if (clamped > 40) statusText = `⚡ Весы на стороне ${childName}! 🌟`;
+  else if (clamped > 10) statusText = `📈 Весы на стороне ${childName}`;
+  else if (clamped < -40) statusText = '⚡ Весы на стороне родителей! 💪';
+  else statusText = '📉 Весы на стороне родителей';
+
+  ctx.fillText(statusText, cx, 327);
+
   ctx.fillStyle = '#888780';
-  ctx.font = '13px sans-serif';
-  ctx.fillText(`Баланс: ${clamped > 0 ? '+' : ''}${clamped}`, cx, 330);
+  ctx.font = '12px sans-serif';
+  ctx.fillText(`Баланс: ${clamped > 0 ? '+' : ''}${clamped}`, cx, 347);
 
   return canvas.toBuffer('image/png');
 }
