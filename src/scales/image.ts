@@ -108,20 +108,21 @@ export function generateScalesImage(balanceValue: number, childName: string = '�
   ctx.shadowBlur = 0;
   ctx.shadowOffsetY = 0;
 
-  // Labels under pans
-  ctx.font = `bold 17px sans-serif`;
+  // Labels ON the pans
   ctx.textAlign = 'center';
+  ctx.font = 'bold 15px sans-serif';
 
-  ctx.fillStyle = parentWins ? '#2A1FA0' : '#3C3489';
-  ctx.fillText('Родители', lx, lPlatY + 44);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.shadowColor = 'rgba(0,0,0,0.35)';
+  ctx.shadowBlur = 4;
+  ctx.fillText('Родители', lx, lPlatY + 15);
+  ctx.fillText(childName, rx, rPlatY + 15);
+  ctx.shadowBlur = 0;
 
-  ctx.fillStyle = childWins ? '#7A3C00' : '#854F0B';
-  ctx.fillText(childName, rx, rPlatY + 44);
-
-  // Winner badge
+  // Winner badge (above the winning pan)
   if (parentWins || childWins) {
     const badgeX = parentWins ? lx : rx;
-    const badgeY = parentWins ? lPlatY - 20 : rPlatY - 20;
+    const badgeY = parentWins ? lPlatY - 18 : rPlatY - 18;
     ctx.fillStyle = parentWins ? '#3D2FBB' : '#9B5B00';
     ctx.font = 'bold 13px sans-serif';
     ctx.fillText('▼ тяжелее', badgeX, badgeY);
