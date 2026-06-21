@@ -785,12 +785,29 @@ export function createBot() {
   });
 
   bot.callbackQuery(/^prop:accept:(.+)$/, async (ctx) => {
-    await ctx.answerCallbackQuery('Принято!');
     const proposalId = ctx.match[1];
     const { getTaskProposal, updateTaskProposalStatus } = await import('../db/proposals');
     const proposal = await getTaskProposal(proposalId);
-    if (!proposal) { await ctx.reply('Предложение не найдено'); return; }
+    if (!proposal) { await ctx.answerCallbackQuery('Предложение не найдено'); return; }
 
+    if (proposal.status === 'accepted') {
+      await ctx.answerCallbackQuery('Уже принято другим родителем ✅');
+      await ctx.editMessageText(
+        `✅ *${proposal.title}* — уже принято другим родителем.`,
+        { parse_mode: 'Markdown', reply_markup: new InlineKeyboard() }
+      ).catch(() => {});
+      return;
+    }
+    if (proposal.status === 'rejected') {
+      await ctx.answerCallbackQuery('Предложение уже отклонено');
+      await ctx.editMessageText(
+        `❌ *${proposal.title}* — уже отклонено.`,
+        { parse_mode: 'Markdown', reply_markup: new InlineKeyboard() }
+      ).catch(() => {});
+      return;
+    }
+
+    await ctx.answerCallbackQuery('Принято!');
     await updateTaskProposalStatus(proposalId, 'accepted');
     await setSessionKey(ctx.from.id, 'proposalReward', { proposalId, title: proposal.title });
     await ctx.editMessageText(
@@ -800,12 +817,29 @@ export function createBot() {
   });
 
   bot.callbackQuery(/^prop:reject:(.+)$/, async (ctx) => {
-    await ctx.answerCallbackQuery('Отклонено');
     const proposalId = ctx.match[1];
     const { getTaskProposal, updateTaskProposalStatus } = await import('../db/proposals');
     const proposal = await getTaskProposal(proposalId);
-    if (!proposal) { await ctx.reply('Предложение не найдено'); return; }
+    if (!proposal) { await ctx.answerCallbackQuery('Предложение не найдено'); return; }
 
+    if (proposal.status === 'accepted') {
+      await ctx.answerCallbackQuery('Уже принято другим родителем ✅');
+      await ctx.editMessageText(
+        `✅ *${proposal.title}* — уже принято другим родителем.`,
+        { parse_mode: 'Markdown', reply_markup: new InlineKeyboard() }
+      ).catch(() => {});
+      return;
+    }
+    if (proposal.status === 'rejected') {
+      await ctx.answerCallbackQuery('Уже отклонено');
+      await ctx.editMessageText(
+        `❌ *${proposal.title}* — уже отклонено.`,
+        { parse_mode: 'Markdown', reply_markup: new InlineKeyboard() }
+      ).catch(() => {});
+      return;
+    }
+
+    await ctx.answerCallbackQuery('Отклонено');
     await updateTaskProposalStatus(proposalId, 'rejected');
     await ctx.editMessageText(`❌ *${proposal.title}* — отклонено.`, { parse_mode: 'Markdown' });
 
