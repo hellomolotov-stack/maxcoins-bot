@@ -1,7 +1,7 @@
 import { Bot, Context, InlineKeyboard } from 'grammy';
 import {
   getActiveTasks, getTask, createTask, createSubmission,
-  updateSubmission, getSubmission, getPendingSubmissions, deactivateTask,
+  updateSubmission, getSubmission, getPendingSubmissions, deactivateTask, deleteTask,
 } from '../../db/tasks';
 import { addMaxcoins, getSettings } from '../../db/balance';
 import {
@@ -27,16 +27,23 @@ export async function showTaskListForChild(ctx: Context) {
 
 export async function showAdminTasksPanel(ctx: Context) {
   const tasks = await getActiveTasks();
-  const keyboard = new InlineKeyboard().text('➕ Новое задание', 'admin:tasks:new').row();
   if (!tasks.length) {
+    const keyboard = new InlineKeyboard().text('➕ Новое задание', 'admin:tasks:new');
     await ctx.reply('Заданий пока нет.', { reply_markup: keyboard });
     return;
   }
-  let text = '📋 *Активные задания:*\n\n';
+  await ctx.reply(`📋 *Активные задания (${tasks.length}):*`, { parse_mode: 'Markdown' });
   for (const t of tasks) {
-    text += `${t.type === 'recurring' ? '🔄' : '1️⃣'} *${t.title}* — ${t.reward} 🪙\n`;
+    const icon = t.type === 'recurring' ? '🔄' : '1️⃣';
+    const kb = new InlineKeyboard()
+      .text('🗑️ Удалить', `admin:tasks:delete:${t.id}`);
+    await ctx.reply(
+      `${icon} *${t.title}* — ${t.reward} 🪙`,
+      { parse_mode: 'Markdown', reply_markup: kb }
+    );
   }
-  await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+  const addKb = new InlineKeyboard().text('➕ Новое задание', 'admin:tasks:new');
+  await ctx.reply('──────────────', { reply_markup: addKb });
 }
 
 export async function showAdminSubmissions(ctx: Context) {
@@ -292,6 +299,14 @@ export function registerTaskHandlers(bot: Bot) {
   bot.callbackQuery('admin:tasks', async (ctx) => {
     await ctx.answerCallbackQuery();
     await showAdminTasksPanel(ctx);
+  });
+
+  bot.callbackQuery(/^admin:tasks:delete:(.+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery('Удалено');
+    const task = await getTask(ctx.match[1]);
+    if (!task) { await ctx.editMessageText('Задание не найдено').catch(() => {}); return; }
+    await deleteTask(task.id);
+    await ctx.editMessageText(`🗑️ Задание *${task.title}* удалено.`, { parse_mode: 'Markdown' });
   });
 
   bot.callbackQuery('admin:submissions', async (ctx) => {

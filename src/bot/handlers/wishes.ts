@@ -1,5 +1,5 @@
 import { Bot, Context, InlineKeyboard } from 'grammy';
-import { createWish, getWishes, getWish, updateWishStatus, getWishesMulti } from '../../db/wishes';
+import { createWish, getWishes, getWish, updateWishStatus, getWishesMulti, deleteWish } from '../../db/wishes';
 import { spendMaxcoins, addMaxcoins, getBalance, getSettings } from '../../db/balance';
 import { getSession, setSessionKey, clearSessionKey } from '../../db/session';
 import { Settings } from '../../types';
@@ -13,38 +13,58 @@ export function startWishProposal(userId: number): Promise<void> {
 export async function showWishesForChild(ctx: Context) {
   const balance = await getBalance();
 
-  // approved = ready to activate; current = already activated (coins spent)
-  const [approved, current] = await Promise.all([
+  const [approved, current, pending] = await Promise.all([
     getWishes('approved'),
     getWishes('current'),
+    getWishes('pending'),
   ]);
 
-  const keyboard = new InlineKeyboard();
   let text = `🌟 *Хотелки*\n\n💰 У тебя ${balance.maxcoins} Макскоинов\n\n`;
 
+  // Active wishes (coins spent, waiting for parents)
   if (current.length) {
-    text += `⚡ *Активные сейчас:*\n`;
+    text += `⚡ *Хочу сейчас:*\n`;
     for (const w of current) {
-      text += `• ${w.title} (${w.cost} 🪙)\n`;
+      text += `• ${w.title} (${w.cost} 🪙) — ждём родителей\n`;
     }
-    text += `\n_Родители видят эти хотелки и знают, что ты хочешь их сейчас._\n\n`;
+    text += `\n`;
   }
 
+  // Approved — shown as inline buttons (activate or delete)
   if (approved.length) {
-    text += `✅ *Доступны:*\n`;
+    text += `✅ *Одобрены:*\n`;
     for (const w of approved) {
       const canAfford = balance.maxcoins >= w.cost;
-      const label = `${canAfford ? '✅' : '🔒'} ${w.title} — ${w.cost} 🪙`;
-      keyboard.text(label, `wishes:spend:${w.id}`).row();
-      text += `• ${w.title} — ${w.cost} 🪙${canAfford ? '' : ' (не хватает монет)'}\n`;
+      text += `• ${w.title} — ${w.cost} 🪙${canAfford ? '' : ' 🔒'}\n`;
     }
-    text += `\n✅ — нажми чтобы активировать\n🔒 — не хватает монеток\n`;
+    text += `\n`;
   }
 
-  if (!approved.length && !current.length) {
-    text += `Одобренных хотелок пока нет.\nПредложи что-нибудь!`;
+  // Pending — child can delete
+  if (pending.length) {
+    text += `⏳ *На согласовании:*\n`;
+    for (const w of pending) {
+      text += `• ${w.title} — ${w.cost} 🪙\n`;
+    }
+    text += `\n`;
   }
 
+  if (!approved.length && !current.length && !pending.length) {
+    text += `Хотелок пока нет. Предложи что-нибудь!`;
+  }
+
+  // Build keyboard: one row per approved wish (activate + delete), then pending (delete only)
+  const keyboard = new InlineKeyboard();
+  for (const w of approved) {
+    const canAfford = balance.maxcoins >= w.cost;
+    keyboard
+      .text(canAfford ? `✅ ${w.title}` : `🔒 ${w.title}`, `wishes:spend:${w.id}`)
+      .text('🗑️', `wishes:child:delete:${w.id}`)
+      .row();
+  }
+  for (const w of pending) {
+    keyboard.text(`🗑️ Удалить «${w.title}»`, `wishes:child:delete:${w.id}`).row();
+  }
   keyboard.text('➕ Предложить новую', 'wishes:propose');
 
   await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
@@ -72,7 +92,8 @@ export async function showAdminWishesPanel(ctx: Context) {
     for (const w of pending) {
       const kb = new InlineKeyboard()
         .text('✅ Одобрить', `admin:wishes:approve:${w.id}`)
-        .text('❌ Отклонить', `admin:wishes:reject:${w.id}`);
+        .text('❌ Отклонить', `admin:wishes:reject:${w.id}`).row()
+        .text('🗑️ Удалить', `admin:wishes:delete:${w.id}`);
       await ctx.reply(`✨ *${w.title}*\n💰 Цена: ${w.cost} 🪙`, { parse_mode: 'Markdown', reply_markup: kb });
     }
   }
@@ -302,5 +323,28 @@ export function registerWishHandlers(bot: Bot) {
       `😔 Родители отменили хотелку *${wish.title}*.\n\n💰 Тебе вернули ${wish.cost} Макскоинов.\nТеперь у тебя ${newBalance.maxcoins} 🪙`,
       { parse_mode: 'Markdown' }
     ).catch(() => {});
+  });
+
+  // Parent deletes wish entirely
+  bot.callbackQuery(/^admin:wishes:delete:(.+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery('Удалено');
+    const wish = await getWish(ctx.match[1]);
+    if (!wish) { await ctx.editMessageText('Не найдено').catch(() => {}); return; }
+    await deleteWish(wish.id);
+    await ctx.editMessageText(`🗑️ Хотелка *${wish.title}* удалена.`, { parse_mode: 'Markdown' }).catch(() => {});
+  });
+
+  // Child deletes their own pending or approved wish
+  bot.callbackQuery(/^wishes:child:delete:(.+)$/, async (ctx) => {
+    const wish = await getWish(ctx.match[1]);
+    if (!wish) { await ctx.answerCallbackQuery('Не найдено'); return; }
+    if (wish.status === 'current') {
+      await ctx.answerCallbackQuery('Уже активирована — попроси родителей отменить');
+      return;
+    }
+    await ctx.answerCallbackQuery('Удалено');
+    await deleteWish(wish.id);
+    await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard() }).catch(() => {});
+    await ctx.reply(`🗑️ Хотелка *${wish.title}* удалена.`, { parse_mode: 'Markdown' });
   });
 }

@@ -27,6 +27,10 @@ export async function deactivateTask(taskId: string): Promise<void> {
   await db.collection('tasks').doc(taskId).update({ active: false });
 }
 
+export async function deleteTask(taskId: string): Promise<void> {
+  await db.collection('tasks').doc(taskId).delete();
+}
+
 export async function createSubmission(
   data: Omit<Submission, 'id' | 'submittedAt'>
 ): Promise<Submission> {
