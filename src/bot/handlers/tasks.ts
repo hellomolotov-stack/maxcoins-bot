@@ -139,7 +139,7 @@ export function registerTaskHandlers(bot: Bot) {
 
     await ctx.api.sendAnimation(
       submission.childId,
-      GIF.TASK_APPROVED,
+      GIF.TASK_APPROVED(),
       {
         caption:
           `🎉 Родители приняли задание *${submission.taskTitle}*!\n\n` +
