@@ -34,7 +34,7 @@ export interface Wish {
   title: string;
   cost: number;
   proposedBy: number;
-  status: 'pending' | 'approved' | 'rejected' | 'redeemed';
+  status: 'pending' | 'approved' | 'rejected' | 'redeemed' | 'current';
   createdAt: FirebaseFirestore.Timestamp;
 }
 

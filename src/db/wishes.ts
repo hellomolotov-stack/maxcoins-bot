@@ -34,3 +34,11 @@ export async function updateWishStatus(
 ): Promise<void> {
   await db.collection('wishes').doc(id).update({ status });
 }
+
+export async function getWishesMulti(statuses: Wish['status'][]): Promise<Wish[]> {
+  const snap = await db.collection('wishes').get();
+  const all = snap.docs.map(d => d.data() as Wish);
+  return all
+    .filter(w => statuses.includes(w.status))
+    .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
+}
