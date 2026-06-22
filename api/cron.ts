@@ -30,7 +30,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   });
 
   const scalesText = scalesTextBlock(balance);
-  const image = generateScalesImage(balance.value);
+  const image = await generateScalesImage(balance.value);
 
   let tasksText = '';
   if (todayTasks.length) {

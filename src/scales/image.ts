@@ -1,15 +1,22 @@
-import { createCanvas } from '@napi-rs/canvas';
+import { createCanvas, loadImage, Image } from '@napi-rs/canvas';
+import { CAT_BUFFERS } from './cats';
 
-const CAT_FACES = ['😺', '😸', '😹', '😻', '😼', '😽', '🙀', '😿', '😾', '🐱', '🐈', '🐈‍⬛'];
-
-function pickTwoDifferentCats(): [string, string] {
-  const a = CAT_FACES[Math.floor(Math.random() * CAT_FACES.length)];
-  let b = CAT_FACES[Math.floor(Math.random() * CAT_FACES.length)];
-  while (b === a) b = CAT_FACES[Math.floor(Math.random() * CAT_FACES.length)];
-  return [a, b];
+let catImagesPromise: Promise<Image[]> | null = null;
+function loadCats(): Promise<Image[]> {
+  if (!catImagesPromise) {
+    catImagesPromise = Promise.all(CAT_BUFFERS.map(buf => loadImage(buf)));
+  }
+  return catImagesPromise;
 }
 
-export function generateScalesImage(balanceValue: number, childName: string = 'Ребёнок'): Buffer {
+function pickTwoDifferentCats(cats: Image[]): [Image, Image] {
+  const a = Math.floor(Math.random() * cats.length);
+  let b = Math.floor(Math.random() * cats.length);
+  while (b === a) b = Math.floor(Math.random() * cats.length);
+  return [cats[a], cats[b]];
+}
+
+export async function generateScalesImage(balanceValue: number, childName: string = 'Ребёнок'): Promise<Buffer> {
   const canvas = createCanvas(600, 380);
   const ctx = canvas.getContext('2d');
 
@@ -119,26 +126,25 @@ export function generateScalesImage(balanceValue: number, childName: string = '�
   ctx.shadowBlur = 0;
   ctx.shadowOffsetY = 0;
 
-  // Random cat faces on each pan
-  const [leftCat, rightCat] = pickTwoDifferentCats();
+  // Random cat images on each pan
+  const cats = await loadCats();
+  const [leftCat, rightCat] = pickTwoDifferentCats(cats);
 
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
-  // Cat on left pan (above label)
-  ctx.font = '34px "Apple Color Emoji", "Noto Color Emoji", sans-serif';
-  ctx.fillText(leftCat, lx, lCY - 6);
-
-  // Cat on right pan
-  ctx.fillText(rightCat, rx, rCY - 6);
+  // Draw cat image centered on each pan, sized to fit
+  const catSize = 44;
+  ctx.drawImage(leftCat, lx - catSize / 2, lCY - catSize / 2 - 4, catSize, catSize);
+  ctx.drawImage(rightCat, rx - catSize / 2, rCY - catSize / 2 - 4, catSize, catSize);
 
   // Labels under the cats
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
   ctx.font = 'bold 14px sans-serif';
+
   ctx.fillStyle = parentWins ? '#1A0E8A' : '#2E2575';
-  ctx.fillText('Родители', lx, lCY + 16);
+  ctx.fillText('Родители', lx, lCY + 22);
 
   ctx.fillStyle = childWins ? '#5C2800' : '#6B3A00';
-  ctx.fillText(childName, rx, rCY + 16);
+  ctx.fillText(childName, rx, rCY + 22);
 
   ctx.textBaseline = 'alphabetic';
 

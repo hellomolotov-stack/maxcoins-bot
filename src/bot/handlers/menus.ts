@@ -22,7 +22,7 @@ export async function showChildMenu(ctx: Context) {
   const childName = settings?.childName ?? 'Ребёнок';
   const text = scalesTextBlock(balance, childName);
   await ctx.replyWithPhoto(
-    new InputFile(generateScalesImage(balance.value, childName), 'scales.png'),
+    new InputFile(await generateScalesImage(balance.value, childName), 'scales.png'),
     { caption: text, parse_mode: 'Markdown', reply_markup: childKeyboard }
   );
 }
@@ -43,7 +43,7 @@ export async function showParentMenu(ctx: Context) {
     .text('🌟 Хотелки', 'admin:wishes').text('⚙️ Настройки', 'admin:settings');
 
   await ctx.replyWithPhoto(
-    new InputFile(generateScalesImage(balance.value, childName), 'scales.png'),
+    new InputFile(await generateScalesImage(balance.value, childName), 'scales.png'),
     { caption, parse_mode: 'Markdown', reply_markup: parentKeyboard }
   );
   await ctx.reply('Выбери действие:', { reply_markup: actionKb });
