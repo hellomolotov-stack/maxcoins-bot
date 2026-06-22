@@ -294,6 +294,24 @@ export function registerTaskHandlers(bot: Bot) {
       `💰 ${task.reward} Макскоинов · ${type === 'recurring' ? '🔄 каждый день' : '1️⃣ разовое'}`,
       { parse_mode: 'Markdown', reply_markup: keyboard }
     );
+
+    // Уведомляем ребёнка о новом задании
+    const settings = await getSettings() as Settings;
+    if (settings?.childId) {
+      const childKb = new InlineKeyboard().text('📋 Посмотреть задания', 'tasks:list');
+      await ctx.api.sendAnimation(
+        settings.childId,
+        GIF.NEW_TASK,
+        {
+          caption:
+            `📌 *Новое задание!*\n\n*${task.title}*\n${task.description}\n\n` +
+            `💰 Награда: *${task.reward} Макскоинов*\n` +
+            `${type === 'recurring' ? '🔄 Каждый день' : '1️⃣ Разовое'}`,
+          parse_mode: 'Markdown',
+          reply_markup: childKb,
+        }
+      ).catch(() => {});
+    }
   });
 
   bot.callbackQuery('admin:tasks', async (ctx) => {
