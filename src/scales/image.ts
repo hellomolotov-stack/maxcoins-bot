@@ -1,5 +1,14 @@
 import { createCanvas } from '@napi-rs/canvas';
 
+const CAT_FACES = ['😺', '😸', '😹', '😻', '😼', '😽', '🙀', '😿', '😾', '🐱', '🐈', '🐈‍⬛'];
+
+function pickTwoDifferentCats(): [string, string] {
+  const a = CAT_FACES[Math.floor(Math.random() * CAT_FACES.length)];
+  let b = CAT_FACES[Math.floor(Math.random() * CAT_FACES.length)];
+  while (b === a) b = CAT_FACES[Math.floor(Math.random() * CAT_FACES.length)];
+  return [a, b];
+}
+
 export function generateScalesImage(balanceValue: number, childName: string = 'Ребёнок'): Buffer {
   const canvas = createCanvas(600, 380);
   const ctx = canvas.getContext('2d');
@@ -110,18 +119,26 @@ export function generateScalesImage(balanceValue: number, childName: string = '�
   ctx.shadowBlur = 0;
   ctx.shadowOffsetY = 0;
 
-  // Labels ON pans — centered in each ellipse
+  // Random cat faces on each pan
+  const [leftCat, rightCat] = pickTwoDifferentCats();
+
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  // Left label (Родители) — dark purple on purple pan
-  ctx.font = 'bold 17px sans-serif';
-  ctx.fillStyle = parentWins ? '#1A0E8A' : '#2E2575';
-  ctx.fillText('Родители', lx, lCY);
+  // Cat on left pan (above label)
+  ctx.font = '34px "Apple Color Emoji", "Noto Color Emoji", sans-serif';
+  ctx.fillText(leftCat, lx, lCY - 6);
 
-  // Right label (childName) — dark brown on gold pan
+  // Cat on right pan
+  ctx.fillText(rightCat, rx, rCY - 6);
+
+  // Labels under the cats
+  ctx.font = 'bold 14px sans-serif';
+  ctx.fillStyle = parentWins ? '#1A0E8A' : '#2E2575';
+  ctx.fillText('Родители', lx, lCY + 16);
+
   ctx.fillStyle = childWins ? '#5C2800' : '#6B3A00';
-  ctx.fillText(childName, rx, rCY);
+  ctx.fillText(childName, rx, rCY + 16);
 
   ctx.textBaseline = 'alphabetic';
 
