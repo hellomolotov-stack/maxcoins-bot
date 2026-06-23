@@ -53,13 +53,15 @@ export async function showWishesForChild(ctx: Context) {
     text += `Хотелок пока нет. Предложи что-нибудь!`;
   }
 
-  // Build keyboard: one row per approved wish (activate + delete), then pending (delete only)
+  // Кнопки: на каждую хотелку — отдельная строка с действием, ниже отдельная строка с удалением.
+  // Текст хотелок виден полностью в caption выше; кнопки только подтверждают действие.
   const keyboard = new InlineKeyboard();
   for (const w of approved) {
     const canAfford = balance.maxcoins >= w.cost;
     keyboard
-      .text(canAfford ? `✅ ${w.title}` : `🔒 ${w.title}`, `wishes:spend:${w.id}`)
-      .text('🗑️', `wishes:child:delete:${w.id}`)
+      .text(canAfford ? `✅ Активировать «${w.title}»` : `🔒 «${w.title}» — копи монетки`, `wishes:spend:${w.id}`)
+      .row()
+      .text(`🗑️ Удалить «${w.title}»`, `wishes:child:delete:${w.id}`)
       .row();
   }
   for (const w of pending) {

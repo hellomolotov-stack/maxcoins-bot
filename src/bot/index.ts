@@ -482,25 +482,42 @@ export function createBot() {
       }
       if (text === '🙏🏻 Важно поговорить') {
         const settings = await getSettings();
-        const parents = (settings.parents ?? []).filter(p => p.role);
+        const session = await getSession(ctx.from.id);
+        const today = new Date().toISOString().split('T')[0];
+        const limits = session.talkLimits ?? {};
 
-        if (!parents.length) {
-          for (const pid of settings.parentIds) {
-            await ctx.api.sendAnimation(pid, GIF.CHILD_WANTS_TALK, {
-              caption: `🙏🏻 *${settings.childName} хочет поговорить!*\n\nНайди время его выслушать.`,
-              parse_mode: 'Markdown',
-            });
-          }
-          await ctx.reply('✅ Родители уведомлены! Скоро поговорят с тобой 🤗');
+        // Собираем по одной кнопке на каждого родителя из parentIds
+        // (даже если у родителя ещё нет роли — выводим как Родитель/Мама/Папа).
+        const parentsById = new Map((settings.parents ?? []).map(p => [p.id, p]));
+        const seenRoles = new Set<string>();
+        const buttons: { id: number; role: 'Мама' | 'Папа' | 'Родитель' }[] = [];
+        for (const pid of settings.parentIds) {
+          const known = parentsById.get(pid);
+          let role: 'Мама' | 'Папа' | 'Родитель' = known?.role || 'Родитель';
+          if (role === 'Родитель' && !seenRoles.has('Мама')) role = 'Мама';
+          else if (role === 'Родитель' && !seenRoles.has('Папа')) role = 'Папа';
+          seenRoles.add(role);
+          buttons.push({ id: pid, role });
+        }
+
+        if (!buttons.length) {
+          await ctx.reply('Родители ещё не настроены в боте.');
           return;
         }
 
         const keyboard = new InlineKeyboard();
-        for (const p of parents) {
-          const emoji = p.role === 'Мама' ? '🩷' : '💙';
-          keyboard.text(`${emoji} ${p.role}`, `talk:${p.id}`).row();
+        for (const b of buttons) {
+          const limEntry = limits[String(b.id)];
+          const usedToday = limEntry?.date === today ? limEntry.count : 0;
+          const remaining = Math.max(0, 3 - usedToday);
+          const emoji = b.role === 'Мама' ? '🩷' : b.role === 'Папа' ? '💙' : '👤';
+          const label = `${emoji} ${b.role} — осталось ${remaining}/3`;
+          keyboard.text(label, `talk:${b.id}`).row();
         }
-        await ctx.reply('К кому хочешь обратиться?', { reply_markup: keyboard });
+        await ctx.reply(
+          'К кому хочешь обратиться?\n_(можно по 3 раза в день каждому)_',
+          { parse_mode: 'Markdown', reply_markup: keyboard }
+        );
         return;
       }
       if (text === '💡 Предложить задание') {
