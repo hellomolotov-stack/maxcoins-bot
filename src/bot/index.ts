@@ -559,6 +559,22 @@ export function createBot() {
         );
         return;
       }
+      if (text === '⚙️ РАБОТА') {
+        const settings = await getSettings();
+        const me = (settings.parents ?? []).find(p => p.id === ctx.from!.id);
+        const kb = new InlineKeyboard();
+        if (me?.role === 'Мама' || me?.role === 'Папа') {
+          kb.text(`📢 Сообщить как ${me.role}`, `work:${me.role}`);
+        } else {
+          kb.text('🩷 Мама работает', 'work:Мама')
+            .text('💙 Папа работает', 'work:Папа');
+        }
+        await ctx.reply(
+          '⚙️ *РАБОТА*\n\nКем сообщить ребёнку, что сейчас не нужно отвлекать?',
+          { parse_mode: 'Markdown', reply_markup: kb }
+        );
+        return;
+      }
       if (text === '⚙️ Кабинет') {
         await ctx.api.sendMessage(ctx.from.id, '⏳ Загружаю кабинет...').catch(() => {});
         const settings = await getSettings();
@@ -669,6 +685,34 @@ export function createBot() {
   });
 
   // ── Post-auth: настройки ──────────────────────────────────────────────
+  bot.callbackQuery(/^work:(Мама|Папа)$/, async (ctx) => {
+    await ctx.answerCallbackQuery('Ребёнок уведомлён');
+    const role = ctx.match[1] as 'Мама' | 'Папа';
+    const settings = await getSettings();
+    if (!settings?.childId) {
+      await ctx.editMessageText('⚠️ Ребёнок не подключён к боту.').catch(() => {});
+      return;
+    }
+
+    const emoji = role === 'Мама' ? '🩷' : '💙';
+    await ctx.editMessageText(
+      `${emoji} Ребёнку отправлено: *${role}* работает.`,
+      { parse_mode: 'Markdown' }
+    ).catch(() => {});
+
+    await ctx.api.sendAnimation(
+      settings.childId,
+      GIF.DISTRACTION,
+      {
+        caption:
+          `${emoji} *${role} сейчас работает*\n\n` +
+          `Пожалуйста, не отвлекай — займись чем-то самостоятельно.\n` +
+          `Если что-то срочное, нажми «🙏🏻 Важно поговорить».`,
+        parse_mode: 'Markdown',
+      }
+    ).catch(() => {});
+  });
+
   bot.callbackQuery('admin:settings', async (ctx) => {
     await ctx.answerCallbackQuery();
     const settings = await getSettings();

@@ -14,7 +14,8 @@ export const parentKeyboard = new Keyboard()
   .text('📊 Статус').text('📋 Задания').row()
   .text('✅ На проверке').text('🌟 Хотелки').row()
   .text('➕ Добавить задание').text('‼️ Отвлечение ‼️').row()
-  .text('⚠️ Нарушение').text('⚙️ Кабинет')
+  .text('⚠️ Нарушение').text('⚙️ Кабинет').row()
+  .text('⚙️ РАБОТА')
   .resized().persistent();
 
 export async function showChildMenu(ctx: Context) {
