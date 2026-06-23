@@ -49,4 +49,7 @@ export const GIF = {
 
   // Grumpy Cat
   GRUMPY:           'https://media.tenor.com/6IKOpbGWD_QAAAAC/cat-with-wiered-and-cute-reactions-cat.gif',
+
+  // Shh-cat — родитель работает, не отвлекать (MP4 для надёжного inline-проигрывания)
+  WORK:             'https://media.tenor.com/6sv5nh2QroQAAAPo/shh.mp4',
 };

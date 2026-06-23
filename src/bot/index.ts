@@ -719,7 +719,7 @@ export function createBot() {
 
     await ctx.api.sendAnimation(
       settings.childId,
-      GIF.DISTRACTION,
+      GIF.WORK,
       {
         caption:
           `${emoji} *${role} сейчас работает*\n\n` +
